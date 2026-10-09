@@ -29,8 +29,9 @@ function Sidebar() {
   const loc = useLocation()
   const isActiveItem = (i: { to: string; end?: boolean }) => (i.end ? loc.pathname === i.to : loc.pathname.startsWith(i.to))
   const activeGroup = NAV.find((g) => g.items.some(isActiveItem))?.id ?? null
-  // Manual expand/collapse per section (several can stay open). Entering a section re-opens it so the current page is visible.
-  const [open, setOpen] = useState<Record<string, boolean>>(() => (activeGroup ? { [activeGroup]: true } : {}))
+  // Every section starts expanded (not persisted, so each session/login opens them all); users can collapse and reopen.
+  // Entering a collapsed section re-opens it so the current page is visible.
+  const [open, setOpen] = useState<Record<string, boolean>>(() => Object.fromEntries(NAV.filter((g) => g.label).map((g) => [g.id, true])))
   const [seenGroup, setSeenGroup] = useState(activeGroup)
   if (seenGroup !== activeGroup) {
     setSeenGroup(activeGroup)
