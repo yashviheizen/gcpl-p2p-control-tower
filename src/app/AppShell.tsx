@@ -1,6 +1,6 @@
-import { ChevronDown, ChevronsLeft, ChevronsRight, Lock, RotateCcw, UserCircle2 } from 'lucide-react'
+import { ChevronDown, ChevronsLeft, ChevronsRight, Lock, LogOut, RotateCcw, UserCircle2 } from 'lucide-react'
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { ASSISTANT_WIDTH, AskP2PButton, AssistantDrawer } from '@/components/AssistantPanel'
 import { FilterBar } from '@/components/FilterBar'
 import { Button, DemoBadge, EmptyState, Loading, Modal, cx, useDismiss } from '@/components/ui'
@@ -8,6 +8,7 @@ import { SCENARIO, SCENARIO_KEY, scaleVendors, type DemoScenario } from '@/data/
 import type { PersonaId } from '@/data/types'
 import { DEMO_TODAY, fmtDateDow } from '@/lib/dates'
 import { useFilters } from '@/lib/filters'
+import { isSignedIn, signOut } from '@/lib/session'
 import { logActivity, PERSONAS, store, useAppState, useExceptions, usePermissions } from '@/lib/store'
 import { NAV, ROUTE_PERMS } from './nav'
 
@@ -134,6 +135,7 @@ function DemoControls({ onReset }: { onReset: () => void }) {
   const persona = useAppState((s) => s.persona)
   const { group, user } = usePermissions()
   const current = PERSONAS.find((p) => p.id === persona)!
+  const navigate = useNavigate()
   return (
     <div ref={ref} className="relative">
       <button
@@ -208,6 +210,17 @@ function DemoControls({ onReset }: { onReset: () => void }) {
             >
               <RotateCcw size={15} aria-hidden className="text-ink-muted" /> Reset demo data…
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                signOut()
+                navigate('/login', { replace: true })
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-body text-ink hover:bg-surface-muted"
+            >
+              <LogOut size={15} aria-hidden className="text-ink-muted" /> Sign out
+            </button>
           </div>
         </div>
       )}
@@ -276,6 +289,16 @@ function RouteGuard({ children }: { children: ReactNode }) {
     )
   if (loc.pathname === '/' && !can('view.overview')) return <EmptyState icon={Lock} title="Overview not available for this persona" />
   return <>{children}</>
+}
+
+/** Simulated demo session: signed-out visitors go to the login screen and come back to the requested route afterwards. */
+export function SignedInShell() {
+  const loc = useLocation()
+  if (!isSignedIn()) {
+    const back = loc.pathname + loc.search
+    return <Navigate to={back === '/' ? '/login' : `/login?next=${encodeURIComponent(back)}`} replace />
+  }
+  return <AppShell />
 }
 
 const MIN_DASHBOARD_WIDTH = 900

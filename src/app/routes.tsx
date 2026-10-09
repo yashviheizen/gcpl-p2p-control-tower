@@ -1,6 +1,7 @@
 import { lazy } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
-import { AppShell } from './AppShell'
+import Login from '@/pages/Login'
+import { SignedInShell } from './AppShell'
 import { Providers } from './Providers'
 
 const Overview = lazy(() => import('@/pages/Overview'))
@@ -28,8 +29,9 @@ export const router = createBrowserRouter(
     {
       element: <Providers />,
       children: [
+        { path: '/login', element: <Login /> },
         {
-          element: <AppShell />,
+          element: <SignedInShell />,
           children: [
             { path: '/', element: <Overview /> },
             { path: '/production', element: <Production /> },
