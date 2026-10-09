@@ -182,6 +182,11 @@
   .hatch-bad {
     background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgba(180, 35, 24, 0.16) 4px 5px);
   }
+  /* Neutral dotted pattern: non-operating day (distinct from the diagonal missing-report hatch). */
+  .dots {
+    background-image: radial-gradient(rgba(82, 82, 91, 0.3) 0.9px, transparent 1.3px);
+    background-size: 5px 5px;
+  }
 }
 
 /* Scrollbars inside contained tables */

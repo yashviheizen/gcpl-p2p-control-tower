@@ -1,8 +1,8 @@
-import { AlertTriangle, ArrowLeft, ArrowUpRight, CalendarRange, ChevronDown, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, Grid3x3, Rows3, SearchCode, SearchX, SlidersHorizontal } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, Grid3x3, Rows3, SearchCode, SearchX, SlidersHorizontal } from 'lucide-react'
 import { startTransition, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { CELL_META, CellStatusBadge, LegendSwatch, MONTHLY_PLAN_TIP, NotComparedLine, StatusLegend } from '@/components/status'
+import { CELL_META, CellCue, CellStatusBadge, LegendSwatch, MONTHLY_PLAN_TIP, NotComparedLine, StatusLegend } from '@/components/status'
 import {
   Button,
   Callout,
@@ -29,7 +29,7 @@ import {
 } from '@/components/ui'
 import type { Dataset } from '@/data/dataset'
 import type { Unit } from '@/data/types'
-import { eachDay, fmtDate, fmtMonth, fmtMonthToDate, fmtRange, LATEST_DUE_DATE, monthOf } from '@/lib/dates'
+import { eachDay, fmtDate, fmtDow, fmtMonth, fmtMonthToDate, fmtRange, LATEST_DUE_DATE, monthOf } from '@/lib/dates'
 import { useFilters, usePageFilters } from '@/lib/filters'
 import { fmtNum, fmtPct, fmtQty, fmtSigned, shortSkuName } from '@/lib/format'
 import { cellsFor, coverageSummary, monthlyPlanRows, runRate, scopePairs, STATUS_ORDER, thresholds, type CellStatus } from '@/lib/metrics'
@@ -187,96 +187,190 @@ function describe(g: GridCell, unit: Unit) {
   return hasComparable(g) ? `comparable plan ${fmtQty(a.planComparable, unit)}, comparable actual ${fmtQty(a.actualComparable, unit)}, ${att}` : m.label
 }
 
-function HeatCell({ g, onOpen, label }: { g: GridCell; onOpen: () => void; label: string }) {
+/** Plain-language plan / actual / attainment for one cell: hover and focus details and the accessible label. */
+function cellFacts(g: GridCell, unit: Unit) {
+  const a = g.agg
+  const q = (v: number) => `${fmtQty(v, unit)} ${unit}`
+  const comp = hasComparable(g)
+  const plan = comp
+    ? q(a.planComparable)
+    : g.status === 'monthly'
+      ? 'Monthly plan only'
+      : g.status === 'future'
+        ? a.planFuture > 0
+          ? `${q(a.planFuture)} (not yet due)`
+          : 'Not yet due'
+        : g.status === 'missing' && a.planUnreported > 0
+          ? `${q(a.planUnreported)} (awaiting report)`
+          : g.status === 'nonOp'
+            ? 'None (non-operating day)'
+            : 'No daily plan'
+  const actual = comp ? q(a.actualComparable) : g.status === 'missing' ? 'Report missing' : g.status === 'future' ? 'Not yet due' : a.actual > 0 ? `${q(a.actual)} (not compared)` : g.status === 'nonOp' ? 'None reported' : '—'
+  const att = a.attainment != null ? fmtPct(a.attainment) : g.status === 'monthly' ? 'Daily N/A' : 'N/A'
+  return { plan, actual, att }
+}
+type Facts = ReturnType<typeof cellFacts>
+
+interface TipContent {
+  who: string
+  when: string
+  status: CellStatus
+  facts: Facts
+}
+interface TipState extends TipContent {
+  x: number
+  y: number
+  below: boolean
+}
+/** One shared details tooltip for every heatmap cell (a single portal; showing it never re-renders the grid). */
+interface TipApi {
+  show: (el: HTMLElement, c: TipContent) => void
+  hide: () => void
+  /** The tooltip registers its setter; returns the unregister function. */
+  register: (set: (t: TipState | null) => void) => () => void
+}
+function useTipApi(): TipApi {
+  return useMemo(() => {
+    const none = () => {}
+    const bind = { current: none as (t: TipState | null) => void }
+    return {
+      register: (set) => {
+        bind.current = set
+        return () => {
+          bind.current = none
+        }
+      },
+      hide: () => bind.current(null),
+      show: (el, c) => {
+        const r = el.getBoundingClientRect()
+        const below = r.top < 150
+        bind.current({ ...c, x: Math.min(Math.max(r.left + r.width / 2, 132), window.innerWidth - 132), y: below ? r.bottom + 6 : r.top - 6, below })
+      },
+    }
+  }, [])
+}
+function HeatTip({ api }: { api: TipApi }) {
+  const [t, setT] = useState<TipState | null>(null)
+  useEffect(() => api.register(setT), [api])
+  useEffect(() => {
+    if (!t) return
+    const hide = () => setT(null)
+    window.addEventListener('scroll', hide, true)
+    return () => window.removeEventListener('scroll', hide, true)
+  }, [t])
+  if (!t) return null
+  const m = CELL_META[t.status]
+  return createPortal(
+    <div
+      aria-hidden
+      data-heat-tip
+      className="pointer-events-none fixed z-50 w-[248px] rounded-md border border-line bg-surface px-2.5 py-2 text-label text-ink shadow-[var(--shadow-pop)]"
+      style={{ left: t.x, top: t.y, transform: `translate(-50%, ${t.below ? '0' : '-100%'})` }}
+    >
+      <div className="font-semibold">{t.when}</div>
+      <div className="mb-1.5 truncate text-ink-muted">{t.who}</div>
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
+        <dt className="text-ink-muted">Plan</dt>
+        <dd className="num text-right">{t.facts.plan}</dd>
+        <dt className="text-ink-muted">Actual</dt>
+        <dd className="num text-right">{t.facts.actual}</dd>
+        <dt className="text-ink-muted">Attainment</dt>
+        <dd className="num text-right font-semibold">{t.facts.att}</dd>
+        <dt className="text-ink-muted">Status</dt>
+        <dd className={cx('inline-flex items-center justify-end gap-1 font-medium', textTone(t.status))}>
+          <m.icon size={12} aria-hidden />
+          {m.label}
+        </dd>
+      </dl>
+      {t.status === 'monthly' && <p className="mt-1.5 text-ink-muted">{MONTHLY_PLAN_TIP}</p>}
+    </div>,
+    document.body,
+  )
+}
+
+/**
+ * Heatmap cell. Colour plus a non-colour cue (symbol, visible 0, warning, pattern or outline); daily attainment % only
+ * with “Show values”. Monthly-plan days join into one shaded band per month. Details show on hover / keyboard focus,
+ * click opens the cell drawer.
+ */
+function HeatCell({ g, onOpen, who, when, unit, values, tip, join = [false, false] }: { g: GridCell; onOpen: () => void; who: string; when: string; unit: Unit; values: boolean; tip: TipApi; join?: [boolean, boolean] }) {
   if (!g.cells.length)
     return (
       <span className="block text-center text-label text-ink-subtle" style={{ height: 'var(--heat-h)', lineHeight: 'var(--heat-h)' }}>
         ·
       </span>
     )
-  if (g.status === 'monthly') return <MonthlyHeatCell onOpen={onOpen} label={label} />
   const m = CELL_META[g.status]
+  const facts = cellFacts(g, unit)
+  const monthly = g.status === 'monthly'
+  const content: TipContent = { who, when, status: g.status, facts }
+  const [l, r] = monthly ? join : [false, false]
   return (
     <button
       type="button"
-      onClick={onOpen}
-      aria-label={`${label}: ${m.label}${g.agg.attainment != null ? `, attainment ${fmtPct(g.agg.attainment)}` : ''}. Open details`}
-      title={m.label}
-      style={{ height: 'var(--heat-h)' }}
+      onClick={() => {
+        tip.hide()
+        onOpen()
+      }}
+      aria-label={`${who}, ${when}: ${m.label}. Plan ${facts.plan}, actual ${facts.actual}, attainment ${facts.att}.${monthly ? ` ${MONTHLY_PLAN_TIP}` : ''} Open details`}
+      onPointerEnter={(e) => e.pointerType === 'mouse' && tip.show(e.currentTarget, content)}
+      onPointerLeave={tip.hide}
+      onFocus={(e) => e.currentTarget.matches(':focus-visible') && tip.show(e.currentTarget, content)}
+      onBlur={tip.hide}
+      onKeyDown={(e) => e.key === 'Escape' && tip.hide()}
+      data-status={g.status}
+      style={{ height: 'var(--heat-h)', marginLeft: l ? -2 : 0, marginRight: r ? -2 : 0, width: `calc(100% + ${(l ? 2 : 0) + (r ? 2 : 0)}px)` }}
       className={cx(
-        'pg-num num flex w-full items-center justify-center rounded-[3px] text-label font-medium whitespace-nowrap outline-offset-1 hover:ring-2 hover:ring-accent/40 focus-visible:outline-2 focus-visible:outline-accent',
+        'pg-num num relative flex items-center justify-center text-label font-medium whitespace-nowrap outline-offset-1 hover:z-[1] hover:outline-2 hover:outline-ink/40 focus-visible:z-[2] focus-visible:outline-2 focus-visible:outline-accent',
         m.cell,
+        monthly ? cx(!l && 'rounded-l-[3px]', !r && 'rounded-r-[3px]') : 'rounded-[3px]',
       )}
     >
-      {cellText(g)}
+      {values && g.agg.attainment != null ? cellText(g) : <CellCue status={g.status} />}
     </button>
   )
 }
 
-/**
- * Monthly-plan day: muted cell with a calendar symbol instead of repeated text. The explanation shows on hover and
- * keyboard focus (and in the cell details on click); the accessible label carries it for screen readers.
- */
-function MonthlyHeatCell({ onOpen, label }: { onOpen: () => void; label: string }) {
-  const [tip, setTip] = useState<{ x: number; y: number; below: boolean } | null>(null)
-  const show = (el: HTMLElement) => {
-    const r = el.getBoundingClientRect()
-    setTip({ x: r.left + r.width / 2, y: r.top < 48 ? r.bottom + 6 : r.top - 6, below: r.top < 48 })
-  }
-  useEffect(() => {
-    if (!tip) return
-    const hide = () => setTip(null)
-    window.addEventListener('scroll', hide, true)
-    return () => window.removeEventListener('scroll', hide, true)
-  }, [tip])
+/** Monthly-plan rows: no daily comparison. “Daily N/A” opens the row details; the arrow jumps to the monthly-plan comparison. */
+function MonthlyTotal({ label, onOpen, onMonthly }: { label: string; onOpen: () => void; onMonthly: () => void }) {
   return (
-    <>
+    <span className="flex items-center justify-end gap-0.5 whitespace-nowrap">
       <button
         type="button"
         onClick={onOpen}
-        aria-label={`${label}: ${CELL_META.monthly.label}. ${MONTHLY_PLAN_TIP} Open details`}
-        onMouseEnter={(e) => show(e.currentTarget)}
-        onMouseLeave={() => setTip(null)}
-        onFocus={(e) => e.currentTarget.matches(':focus-visible') && show(e.currentTarget)}
-        onBlur={() => setTip(null)}
-        onKeyDown={(e) => e.key === 'Escape' && setTip(null)}
-        style={{ height: 'var(--heat-h)' }}
-        className={cx('flex w-full items-center justify-center rounded-[3px] outline-offset-1 hover:ring-2 hover:ring-accent/40 focus-visible:outline-2 focus-visible:outline-accent', CELL_META.monthly.cell)}
+        title={MONTHLY_PLAN_TIP}
+        aria-label={`${label}, period total: daily attainment not applicable. ${MONTHLY_PLAN_TIP} Open details`}
+        className="pg-num pg-hit rounded px-1 text-dense text-info hover:bg-accent-soft/60"
       >
-        <CalendarRange size={13} strokeWidth={2.25} aria-hidden />
+        Daily N/A
       </button>
-      {tip &&
-        createPortal(
-          <span
-            aria-hidden
-            data-monthly-tip
-            className="pointer-events-none fixed z-50 max-w-[260px] rounded bg-ink px-2 py-1 text-label text-white shadow-md"
-            style={{ left: tip.x, top: tip.y, transform: `translate(-50%, ${tip.below ? '0' : '-100%'})` }}
-          >
-            {MONTHLY_PLAN_TIP}
-          </span>,
-          document.body,
-        )}
-    </>
+      <a
+        href="#monthly-plan-vendors"
+        onClick={(e) => {
+          e.preventDefault()
+          onMonthly()
+        }}
+        aria-label={`Compare ${label} with its monthly plan`}
+        title="Compare month-to-date with the monthly plan"
+        className="pg-hit grid h-5 w-5 place-items-center rounded text-accent-ink hover:bg-accent-soft"
+      >
+        <ArrowDown size={13} aria-hidden />
+      </a>
+    </span>
   )
 }
 
-/** Heatmap period total: comparable plan, comparable actual, attainment – the KPI basis. */
-function TotalCell({ g, unit, onOpen, label }: { g: GridCell; unit: Unit; onOpen: () => void; label: string }) {
+/** Heatmap period total: attainment by default; comparable plan and actual with “Show plan & actual totals”. */
+function TotalCell({ g, unit, onOpen, label, full, onMonthly }: { g: GridCell; unit: Unit; onOpen: () => void; label: string; full: boolean; onMonthly: () => void }) {
+  if (g.status === 'monthly') return <MonthlyTotal label={label} onOpen={onOpen} onMonthly={onMonthly} />
   return (
     <button
       type="button"
       onClick={onOpen}
-      className={cx('pg-num pg-hit grid w-full items-center gap-3 rounded text-right text-dense hover:bg-accent-soft/60', TOTAL_GRID)}
+      className={cx('pg-num pg-hit w-full items-center rounded text-right text-dense hover:bg-accent-soft/60', full ? cx('grid gap-3', TOTAL_GRID) : 'block whitespace-nowrap')}
       aria-label={`${label}, period total: ${describe(g, unit)}. Open details`}
     >
-      {g.status === 'monthly' ? (
-        // Monthly-plan rows have no daily comparison: one label across the three sub-columns instead of three clipped ones.
-        <span className="col-span-3 inline-flex items-center justify-end gap-1 text-ink-muted" title={`${MONTHLY_PLAN_TIP} Compared month-to-date in the Monthly-plan vendors table.`}>
-          <CalendarRange size={12} aria-hidden className="text-info" />
-          Not compared
-        </span>
-      ) : (
+      {full && (
         <>
           <span className="num text-ink-muted">
             <PlanValue g={g} unit={unit} />
@@ -284,13 +378,34 @@ function TotalCell({ g, unit, onOpen, label }: { g: GridCell; unit: Unit; onOpen
           <span className="num">
             <ActualValue g={g} unit={unit} />
           </span>
-          <span className="num">
-            <AttText g={g} />
-          </span>
         </>
       )}
+      <span className="num">
+        <AttText g={g} />
+      </span>
     </button>
   )
+}
+
+/** Session-only view preference (sessionStorage): survives navigation and reloads, resets with the browser session. */
+function useSessionFlag(key: string, initial: boolean) {
+  const [v, setV] = useState(() => {
+    try {
+      const s = sessionStorage.getItem(key)
+      return s == null ? initial : s === '1'
+    } catch {
+      return initial
+    }
+  })
+  const set = (next: boolean) => {
+    setV(next)
+    try {
+      sessionStorage.setItem(key, next ? '1' : '0')
+    } catch {
+      /* storage unavailable: preference lasts for this page only */
+    }
+  }
+  return [v, set] as const
 }
 
 const CHILD_NOUN: Record<DrillLevel, [string, string]> = {
@@ -331,7 +446,7 @@ function readReturn(focus: string | null): ReturnState | null {
   }
 }
 /** Legend items shown inline; the complete legend lives in “Legend & definitions”. */
-const COMMON_LEGEND: CellStatus[] = ['below', 'within', 'above', 'zero', 'missing', 'monthly', 'future']
+const COMMON_LEGEND: CellStatus[] = ['below', 'within', 'above', 'zero', 'missing', 'nonOp', 'monthly', 'future']
 
 /** Labelled toolbar section; the visible label only appears where there is room. */
 function ToolGroup({ label, short, first, children }: { label: string; short: string; first?: boolean; children: ReactNode }) {
@@ -398,17 +513,14 @@ function EntityCell({ r, onToggle, onViewVendor, focused, origin }: { r: TreeRow
                 <span className="sr-only"> {CHILD_NOUN[r.childLevel!][r.childCount === 1 ? 0 : 1]}</span>
               </span>
             )}
-          </div>
-          {r.level === 'sku' && <div className="pg-sub truncate text-label leading-4 text-ink-subtle">{r.id}</div>}
-          {/* Shown once, on the vendor row; child rows and day cells carry the calendar symbol only. */}
-          {r.level === 'vendor' && r.monthlyOnly && (
-            <div className="pg-sub flex text-label leading-4">
-              <span className="inline-flex items-center gap-1 rounded-[3px] bg-info-soft/70 px-1 font-medium text-info" title={MONTHLY_PLAN_TIP}>
-                <CalendarRange size={11} strokeWidth={2.25} aria-hidden />
+            {/* Shown once, beside the vendor name; its day cells form one shaded band instead of repeating it. */}
+            {r.level === 'vendor' && r.monthlyOnly && (
+              <span className="pg-sub shrink-0 rounded-[3px] bg-info-soft/70 px-1 text-label leading-4 font-medium whitespace-nowrap text-info" title={MONTHLY_PLAN_TIP}>
                 Monthly plan
               </span>
-            </div>
-          )}
+            )}
+          </div>
+          {r.level === 'sku' && <div className="pg-sub truncate text-label leading-4 text-ink-subtle">{r.id}</div>}
         </div>
         {r.level === 'vendor' && !focused && (
           // Persistent subtle icon; the "View vendor" label slides out over the name end on hover / keyboard focus.
@@ -574,6 +686,10 @@ export default function Production() {
   const [scrollRef, canScrollLeft, canScrollRight, scrollByX] = useHScroll()
   const [totalRef, totalW_px] = useWidth<HTMLTableCellElement>()
   const density = useDensity()
+  // Heatmap view preferences, remembered for the browser session: daily % off and attainment-only totals by default.
+  const [showValues, setShowValues] = useSessionFlag('gcpl-p2p-heat-values', false)
+  const [showTotals, setShowTotals] = useSessionFlag('gcpl-p2p-heat-totals', false)
+  const tip = useTipApi()
   const [fillRef, fillH] = useFillHeight(`${view}|${grain}|${unit}|${density}|${filters.vendorIds.join()}`)
 
   const setParam = (patch: Record<string, string | null>, replace = true) => {
@@ -771,12 +887,25 @@ export default function Production() {
   const isFuture = (c: Column) => c.days[0] > LATEST_DUE_DATE
   // Heatmap day columns 50px; table quantity columns ≥84px and grow for long values (whitespace-nowrap).
   const colW = view === 'heatmap' ? (grain === 'day' ? 'min-w-[48px] w-[48px]' : 'min-w-[88px]') : grain === 'day' ? 'min-w-[84px]' : 'min-w-[104px]'
-  const totalW = view === 'table' ? 'min-w-[112px]' : 'min-w-[180px]'
+  const totalW = view === 'table' ? 'min-w-[112px]' : showTotals ? 'min-w-[180px]' : 'min-w-[104px]'
   // Table view pins two summary columns on the right: period total, then attainment.
   const stickyR = cx('sticky shadow-[inset_2px_0_0_var(--color-line-strong)]', view === 'table' ? 'right-[92px]' : 'right-0')
   const attCol = cx('sticky right-0 border-l border-line', ATT_W)
   const rightW = totalW_px + (view === 'table' ? ATT_PX : 0)
   const openRowTotal = (r: TreeRow) => openCell(r, null, r.total)
+  // Heatmap day grid: a visible rule where a new month starts (e.g. 30 Sep | 1 Oct).
+  const monthEdge = (i: number) => view === 'heatmap' && grain === 'day' && i > 0 && columns[i].key.slice(8) === '01'
+  const EDGE = 'shadow-[inset_2px_0_0_var(--color-line-strong)]'
+  const whenOf = (c: Column) => (grain === 'day' ? `${fmtDow(c.days[0])} ${fmtDate(c.days[0], true)}` : colRange(c))
+  const whoOf = (r: TreeRow) => (r.trail.length ? `${r.trail[0]} › ${r.label}` : r.label) + (r.level === 'sku' ? ` · ${r.id}` : '')
+  // Monthly-plan days within one month join into a single band (the month rule and other statuses break it).
+  const joinOf = (cells: GridCell[], i: number): [boolean, boolean] => [i > 0 && !monthEdge(i) && cells[i - 1].status === 'monthly', i < cells.length - 1 && !monthEdge(i + 1) && cells[i + 1].status === 'monthly']
+  const toMonthly = () => {
+    const el = document.getElementById('monthly-plan-vendors')
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    el?.focus({ preventScroll: true })
+  }
+  const heatLegend: CellStatus[] = tree.rows.some((r) => r.byCol.some((c) => c.status === 'noPlan')) ? [...COMMON_LEGEND, 'noPlan'] : COMMON_LEGEND
 
   return (
     <div>
@@ -966,6 +1095,12 @@ export default function Production() {
                   />
                 </ToolGroup>
                 <ToolGroup label="Grid options" short="Options">
+                  {view === 'heatmap' && (
+                    <label className="mr-1 inline-flex cursor-pointer items-center gap-1.5 rounded px-1 py-1 text-dense whitespace-nowrap text-ink hover:bg-black/5">
+                      <input type="checkbox" role="switch" aria-checked={showValues} checked={showValues} onChange={(e) => setShowValues(e.target.checked)} className="h-3.5 w-3.5 accent-[var(--color-accent)]" />
+                      Show values
+                    </label>
+                  )}
                   <span className="inline-flex items-center" role="group" aria-label="Scroll dates">
                     <IconButton icon={ChevronLeft} label="Scroll to earlier dates" title="Earlier dates" disabled={!canScrollLeft} onClick={() => scrollByX(-320)} />
                     <IconButton icon={ChevronRight} label="Scroll to later dates" title="Later dates" disabled={!canScrollRight} onClick={() => scrollByX(320)} />
@@ -1004,6 +1139,15 @@ export default function Production() {
                             </Button>
                           </div>
                         </div>
+                        {view === 'heatmap' && (
+                          <label className="flex cursor-pointer items-start gap-2 text-dense text-ink">
+                            <input type="checkbox" role="switch" aria-checked={showTotals} checked={showTotals} onChange={(e) => setShowTotals(e.target.checked)} className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-accent)]" />
+                            <span>
+                              Show plan &amp; actual totals
+                              <span className="block text-label text-ink-subtle">Adds period plan and actual beside attainment</span>
+                            </span>
+                          </label>
+                        )}
                         {view === 'table' && (
                           <label className="flex cursor-pointer items-start gap-2 text-dense text-ink">
                             <input type="checkbox" role="switch" aria-checked={showAtt} checked={showAtt} onChange={(e) => setParam({ att: e.target.checked ? '1' : null })} className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-accent)]" />
@@ -1038,7 +1182,7 @@ export default function Production() {
                       <th className={cx(th, 'left-0 z-20', ENTITY_W, view === 'heatmap' && 'border-r')}>Vendor / hierarchy</th>
                       {view === 'table' && <th className={cx(th, METRIC_LEFT, 'z-20 border-r', METRIC_W)}>Metric</th>}
                       {columns.map((c, i) => (
-                        <th key={c.key} className={cx(th, colW, view === 'table' ? 'text-right' : 'px-0.5 text-center', isFuture(c) && 'text-ink-subtle')}>
+                        <th key={c.key} className={cx(th, colW, view === 'table' ? 'text-right' : 'px-0.5 text-center', isFuture(c) && 'text-ink-subtle', monthEdge(i) && EDGE)}>
                           {grain === 'day' ? (
                             <span className="text-label leading-4 whitespace-nowrap" title={`${c.sub} ${c.label}`}>
                               {/* Compact heatmap headers name the month on the first column and wherever a new month starts. */}
@@ -1058,17 +1202,19 @@ export default function Production() {
                           const help = (
                             <HelpTip label="About period totals" align="right">
                               Totals for the selected period on the comparable basis used by the KPIs. A dot marks quantities kept out of the comparison; open the cell for “Additional quantities”. Totals are computed from records, so
-                              expanded rows are never double-counted.
+                              expanded rows are never double-counted.{view === 'heatmap' && ' Turn on “Show plan & actual totals” in View options to add period plan and actual.'}
                             </HelpTip>
                           )
                           return view === 'table' ? (
                             <div className="-my-1 inline-flex h-4 items-center gap-0.5 text-label font-medium text-ink">Period total{help}</div>
-                          ) : (
+                          ) : showTotals ? (
                             <div className={cx('-my-1 grid h-4 items-center gap-2 text-label font-medium text-ink', TOTAL_GRID)}>
                               <span>Period plan</span>
                               <span>Actual</span>
                               <span className="inline-flex items-center justify-end">Att.{help}</span>
                             </div>
+                          ) : (
+                            <div className="-my-1 inline-flex h-4 items-center gap-0.5 text-label font-medium text-ink">Period attainment{help}</div>
                           )
                         })()}
                       </th>
@@ -1083,13 +1229,13 @@ export default function Production() {
                             <EntityCell r={r} onToggle={() => toggle(r)} onViewVendor={() => viewVendor(r.id)} focused={!!focusedVendor} origin={origin} />
                           </td>
                           {columns.map((c, i) => (
-                            <td key={c.key} className={cx('pg-heat px-[2px] py-[4px] align-middle', colW, rowBg(r), groupTop(r, ri))}>
-                              <HeatCell g={r.byCol[i]} label={`${r.label}, ${c.label}`} onOpen={() => openCell(r, c, r.byCol[i])} />
+                            <td key={c.key} className={cx('pg-heat px-[2px] py-[4px] align-middle', colW, rowBg(r), groupTop(r, ri), monthEdge(i) && EDGE)}>
+                              <HeatCell g={r.byCol[i]} who={whoOf(r)} when={whenOf(c)} unit={unit} values={showValues} tip={tip} join={joinOf(r.byCol, i)} onOpen={() => openCell(r, c, r.byCol[i])} />
                             </td>
                           ))}
                           <td aria-hidden className={cx('w-full p-0', rowBg(r), groupTop(r, ri))} />
                           <td className={cx(stickyR, 'pg-entity pg-px z-[5] px-2.5 py-0.5', rowBg(r), groupTop(r, ri))}>
-                            <TotalCell g={r.total} unit={unit} label={r.label} onOpen={() => openRowTotal(r)} />
+                            <TotalCell g={r.total} unit={unit} label={r.label} full={showTotals} onMonthly={toMonthly} onOpen={() => openRowTotal(r)} />
                           </td>
                         </tr>
                       ))}
@@ -1161,13 +1307,13 @@ export default function Production() {
                             {totalLabel} <span className="font-normal text-ink-muted">({tree.vendorCount})</span>
                           </td>
                           {columns.map((c, i) => (
-                            <td key={c.key} className="pg-heat sticky bottom-0 z-[6] border-t-2 border-t-line-strong bg-surface-muted px-[2px] py-[4px]">
-                              <HeatCell g={tree.colTotals[i]} label={`${totalLabel}, ${c.label}`} onOpen={() => openCell(null, c, tree.colTotals[i])} />
+                            <td key={c.key} className={cx('pg-heat sticky bottom-0 z-[6] border-t-2 border-t-line-strong bg-surface-muted px-[2px] py-[4px]', monthEdge(i) && EDGE)}>
+                              <HeatCell g={tree.colTotals[i]} who={totalLabel} when={whenOf(c)} unit={unit} values={showValues} tip={tip} join={joinOf(tree.colTotals, i)} onOpen={() => openCell(null, c, tree.colTotals[i])} />
                             </td>
                           ))}
                           <td aria-hidden className="sticky bottom-0 z-[6] w-full border-t-2 border-t-line-strong bg-surface-muted p-0" />
                           <td className={cx(stickyR, 'pg-px bottom-0 z-[15] border-t-2 border-t-line-strong bg-surface-muted px-2.5 py-1 font-semibold')}>
-                            <TotalCell g={tree.grand} unit={unit} label={totalLabel} onOpen={() => openCell(null, null, tree.grand)} />
+                            <TotalCell g={tree.grand} unit={unit} label={totalLabel} full={showTotals} onMonthly={toMonthly} onOpen={() => openCell(null, null, tree.grand)} />
                           </td>
                         </tr>
                       </tfoot>
@@ -1233,7 +1379,7 @@ export default function Production() {
             <div className="border-t border-line px-4 py-2">
               <div className="flex flex-wrap items-start gap-x-4 gap-y-1.5">
                 {view === 'heatmap' ? (
-                  <StatusLegend statuses={COMMON_LEGEND} className="min-w-0 flex-1" />
+                  <StatusLegend statuses={heatLegend} values={showValues} className="min-w-0 flex-1" />
                 ) : (
                   <ul aria-label="Table legend" className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1 text-label text-ink-muted">
                     <li className="inline-flex items-center gap-1.5">
@@ -1260,7 +1406,7 @@ export default function Production() {
                       {STATUS_ORDER.map((st) => (
                         <div key={st} className="grid grid-cols-[176px_minmax(0,1fr)] items-start gap-x-2">
                           <dt className="flex items-center gap-1.5 font-medium text-ink">
-                            <LegendSwatch status={st} />
+                            <LegendSwatch status={st} values={view === 'heatmap' && showValues} />
                             {CELL_META[st].legend ?? CELL_META[st].label}
                           </dt>
                           <dd className="text-ink-muted">{CELL_META[st].description}</dd>
@@ -1270,7 +1416,11 @@ export default function Production() {
                     <div className="space-y-1.5 text-label text-ink-muted">
                       <p>
                         <span className="font-medium text-ink">Plan</span> (comparable) – daily plan on days with a valid report. <span className="font-medium text-ink">Actual</span> (comparable) – reported production on those days. “Off”
-                        marks a non-operating day; “Not compared” is actual with no daily target.
+                        (table) or a dotted cell (heatmap) marks a non-operating day; “Not compared” is actual with no daily target.
+                      </p>
+                      <p>
+                        <span className="font-medium text-ink">Heatmap</span> – colour plus a symbol, a visible 0, a warning or a pattern, so status never relies on colour. “Show values” adds the daily attainment %; hover or keyboard focus
+                        shows a cell's date, plan, actual, attainment and status, and a click opens its source records. Monthly-plan days form one shaded band per month.
                       </p>
                       <p>
                         <span className="font-medium text-ink">Attainment</span> = comparable actual ÷ comparable plan × 100 (N/A when there is no comparable plan). <span className="font-medium text-ink">Gap</span> = comparable actual −
@@ -1292,65 +1442,68 @@ export default function Production() {
           </Card>
 
           {monthly.length > 0 && (
-            <Card
-              className="mt-4"
-              title={
-                <span className="inline-flex items-center gap-0.5">
-                  Monthly-plan vendors
-                  <HelpTip label="About monthly plans">
-                    These vendors plan by month. The plan is not split by day, so heatmap day cells show a calendar symbol (daily attainment N/A) and are compared month-to-date here instead. “Operating days elapsed” is context only – it is
-                    not used to derive a daily target.
-                  </HelpTip>
-                </span>
-              }
-              subtitle="Month-to-date actual vs monthly plan"
-              bodyClass="p-0"
-            >
-              <TableWrap>
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr>
-                      <th className={th}>Vendor</th>
-                      <th className={th}>SKU</th>
-                      <th className={th}>Month</th>
-                      <th className={cx(th, 'text-right')}>Month plan ({unit})</th>
-                      <th className={cx(th, 'text-right')}>
-                        Actual to {fmtDate(LATEST_DUE_DATE)} ({unit})
-                      </th>
-                      <th className={cx(th, 'text-right')}>% of month plan</th>
-                      <th className={cx(th, 'text-right')}>Operating days elapsed</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {monthly.map((m) => {
-                      const sku = ds.idx.sku.get(m.skuCode)!
-                      const plan = convertFg(m.monthPlanEa, sku, unit)
-                      const act = convertFg(m.mtdActualEa, sku, unit)
-                      return (
-                        <tr key={`${m.vendorId}${m.skuCode}${m.month}`}>
-                          <td className={td}>{ds.idx.vendor.get(m.vendorId)!.name}</td>
-                          <td className={td}>
-                            <Link to={`/sku/${sku.code}`} state={origin} className="text-accent-ink hover:underline">
-                              {shortSkuName(sku.name)}
-                            </Link>{' '}
-                            <span className="text-dense text-ink-muted">{sku.code}</span>
-                          </td>
-                          <td className={td}>{fmtMonthToDate(m.month)}</td>
-                          <td className={tdNum}>{fmtQty(plan, unit)}</td>
-                          <td className={tdNum}>{fmtQty(act, unit)}</td>
-                          <td className={tdNum}>{fmtPct(m.monthPlanEa ? (m.mtdActualEa / m.monthPlanEa) * 100 : null, 1)}</td>
-                          <td className={tdNum}>{fmtPct(m.elapsedShare * 100)}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </TableWrap>
-            </Card>
+            // Target of the “Compare with its monthly plan” links in the heatmap totals.
+            <div id="monthly-plan-vendors" tabIndex={-1} className="mt-4 scroll-mt-4 rounded-[var(--radius-card)] outline-none focus-visible:ring-2 focus-visible:ring-accent">
+              <Card
+                title={
+                  <span className="inline-flex items-center gap-0.5">
+                    Monthly-plan vendors
+                    <HelpTip label="About monthly plans">
+                      These vendors plan by month. The plan is not split by day, so their heatmap days form one shaded band with no daily attainment, and they are compared month-to-date here instead. “Operating days elapsed” is context only
+                      – it is not used to derive a daily target.
+                    </HelpTip>
+                  </span>
+                }
+                subtitle="Month-to-date actual vs monthly plan"
+                bodyClass="p-0"
+              >
+                <TableWrap>
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr>
+                        <th className={th}>Vendor</th>
+                        <th className={th}>SKU</th>
+                        <th className={th}>Month</th>
+                        <th className={cx(th, 'text-right')}>Month plan ({unit})</th>
+                        <th className={cx(th, 'text-right')}>
+                          Actual to {fmtDate(LATEST_DUE_DATE)} ({unit})
+                        </th>
+                        <th className={cx(th, 'text-right')}>% of month plan</th>
+                        <th className={cx(th, 'text-right')}>Operating days elapsed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monthly.map((m) => {
+                        const sku = ds.idx.sku.get(m.skuCode)!
+                        const plan = convertFg(m.monthPlanEa, sku, unit)
+                        const act = convertFg(m.mtdActualEa, sku, unit)
+                        return (
+                          <tr key={`${m.vendorId}${m.skuCode}${m.month}`}>
+                            <td className={td}>{ds.idx.vendor.get(m.vendorId)!.name}</td>
+                            <td className={td}>
+                              <Link to={`/sku/${sku.code}`} state={origin} className="text-accent-ink hover:underline">
+                                {shortSkuName(sku.name)}
+                              </Link>{' '}
+                              <span className="text-dense text-ink-muted">{sku.code}</span>
+                            </td>
+                            <td className={td}>{fmtMonthToDate(m.month)}</td>
+                            <td className={tdNum}>{fmtQty(plan, unit)}</td>
+                            <td className={tdNum}>{fmtQty(act, unit)}</td>
+                            <td className={tdNum}>{fmtPct(m.monthPlanEa ? (m.mtdActualEa / m.monthPlanEa) * 100 : null, 1)}</td>
+                            <td className={tdNum}>{fmtPct(m.elapsedShare * 100)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </TableWrap>
+              </Card>
+            </div>
           )}
         </>
       )}
 
+      <HeatTip api={tip} />
       <CellDrawer ds={ds as Dataset} target={drawer} unit={unit} origin={origin} onClose={() => setDrawer(null)} />
     </div>
   )

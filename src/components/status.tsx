@@ -1,5 +1,5 @@
 // Status vocabularies. Every status pairs colour with an icon and a text label (never colour alone).
-import { AlertOctagon, AlertTriangle, ArrowDown, ArrowUp, CalendarOff, CalendarRange, CheckCircle2, CircleDashed, CircleSlash, Clock, FileQuestion, Hourglass, MinusCircle, PauseCircle, XCircle, type LucideIcon } from 'lucide-react'
+import { AlertOctagon, AlertTriangle, ArrowDown, ArrowUp, CalendarOff, CalendarRange, Check, CheckCircle2, CircleDashed, CircleSlash, Clock, FileQuestion, Hourglass, MinusCircle, PauseCircle, XCircle, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { ExceptionStatus, Severity } from '@/data/types'
 import type { Unit } from '@/data/types'
@@ -63,7 +63,7 @@ export const CELL_META: Record<CellStatus, StatusMeta> = {
   },
   monthly: {
     label: 'Monthly plan',
-    legend: 'Monthly plan — no daily attainment',
+    legend: 'Monthly plan (no daily attainment)',
     short: 'Monthly',
     glyph: '',
     tone: 'info',
@@ -96,7 +96,7 @@ export const CELL_META: Record<CellStatus, StatusMeta> = {
     tone: 'none',
     icon: CalendarOff,
     description: 'Weekly off / holiday on the vendor operating calendar.',
-    cell: 'bg-canvas text-ink-subtle',
+    cell: 'bg-canvas text-ink-subtle dots',
   },
   future: {
     label: 'Not yet due',
@@ -105,7 +105,7 @@ export const CELL_META: Record<CellStatus, StatusMeta> = {
     tone: 'none',
     icon: Hourglass,
     description: 'Date after the latest report due date (8 Oct). Plan shown for reference.',
-    cell: 'bg-surface text-ink-subtle',
+    cell: 'bg-surface text-ink-subtle border border-dashed border-line-strong',
   },
 }
 
@@ -169,35 +169,50 @@ export function ExStatusBadge({ value }: { value: ExceptionStatus }) {
   )
 }
 
-const LEGEND_SAMPLE: Record<CellStatus, string> = {
-  below: '72% ↓',
-  within: '98%',
-  above: '124% ↑',
-  zero: '0',
-  monthly: '',
-  noPlan: 'No plan',
-  missing: 'Missing',
-  nonOp: 'Off',
-  future: '—',
+/** Sample attainment text for legend chips when values are shown. */
+const LEGEND_VALUE: Partial<Record<CellStatus, string>> = { below: '72% ↓', within: '98%', above: '124% ↑', zero: '0%' }
+
+/**
+ * Non-colour cue for a heatmap cell: a symbol for attainment states, a visible 0 for reported zero and a warning for a
+ * missing report. Non-operating (dotted pattern), not yet due (dashed outline) and monthly (grouped band) use shape only.
+ */
+export function CellCue({ status }: { status: CellStatus }) {
+  switch (status) {
+    case 'below':
+      return <ArrowDown size={12} strokeWidth={2.5} aria-hidden />
+    case 'within':
+      return <Check size={12} strokeWidth={2.5} aria-hidden className="opacity-60" />
+    case 'above':
+      return <ArrowUp size={12} strokeWidth={2.5} aria-hidden />
+    case 'zero':
+      return <span className="num font-semibold">0</span>
+    case 'missing':
+      return <AlertTriangle size={12} strokeWidth={2.25} aria-hidden className="text-warn" />
+    case 'noPlan':
+      return <span aria-hidden>–</span>
+    default:
+      return null
+  }
 }
 
-/** Heatmap-style sample chip for one status (same look as the grid cells). */
-export function LegendSwatch({ status }: { status: CellStatus }) {
+/** Heatmap-style sample chip for one status (same look as the grid cells; `values` matches the “Show values” mode). */
+export function LegendSwatch({ status, values = false }: { status: CellStatus; values?: boolean }) {
+  const text = values ? LEGEND_VALUE[status] : undefined
   return (
     <span aria-hidden className={cx('num inline-flex h-5 min-w-[40px] items-center justify-center rounded-[4px] px-1.5 text-label font-medium ring-1 ring-black/5 ring-inset', CELL_META[status].cell)}>
-      {status === 'monthly' ? <CalendarRange size={12} strokeWidth={2.25} /> : LEGEND_SAMPLE[status]}
+      {text ?? <CellCue status={status} />}
     </span>
   )
 }
 
-export function StatusLegend({ statuses, className }: { statuses: CellStatus[]; className?: string }) {
+export function StatusLegend({ statuses, className, values }: { statuses: CellStatus[]; className?: string; values?: boolean }) {
   return (
     <ul aria-label="Status legend" className={cx('flex flex-wrap items-center gap-x-3 gap-y-1 text-label text-ink-muted', className)}>
       {statuses.map((s) => {
         const m = CELL_META[s]
         return (
           <li key={s} className="inline-flex items-center gap-1" title={m.description}>
-            <LegendSwatch status={s} />
+            <LegendSwatch status={s} values={values} />
             {m.legend ?? m.label}
           </li>
         )
