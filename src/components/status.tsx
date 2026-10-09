@@ -17,7 +17,12 @@ export interface StatusMeta {
   cell: string
   /** Text glyph paired with the % in heatmap cells so status is never colour-only */
   glyph: string
+  /** Legend wording when it needs more than the label */
+  legend?: string
 }
+
+/** Explanation for heatmap cells of monthly-plan vendors (tooltip, accessible label and cell details). */
+export const MONTHLY_PLAN_TIP = 'Daily attainment unavailable: this vendor plans monthly.'
 
 export const CELL_META: Record<CellStatus, StatusMeta> = {
   below: {
@@ -58,6 +63,7 @@ export const CELL_META: Record<CellStatus, StatusMeta> = {
   },
   monthly: {
     label: 'Monthly plan',
+    legend: 'Monthly plan — no daily attainment',
     short: 'Monthly',
     glyph: '',
     tone: 'info',
@@ -168,7 +174,7 @@ const LEGEND_SAMPLE: Record<CellStatus, string> = {
   within: '98%',
   above: '124% ↑',
   zero: '0',
-  monthly: 'Mthly',
+  monthly: '',
   noPlan: 'No plan',
   missing: 'Missing',
   nonOp: 'Off',
@@ -179,7 +185,7 @@ const LEGEND_SAMPLE: Record<CellStatus, string> = {
 export function LegendSwatch({ status }: { status: CellStatus }) {
   return (
     <span aria-hidden className={cx('num inline-flex h-5 min-w-[40px] items-center justify-center rounded-[4px] px-1.5 text-label font-medium ring-1 ring-black/5 ring-inset', CELL_META[status].cell)}>
-      {LEGEND_SAMPLE[status]}
+      {status === 'monthly' ? <CalendarRange size={12} strokeWidth={2.25} /> : LEGEND_SAMPLE[status]}
     </span>
   )
 }
@@ -192,7 +198,7 @@ export function StatusLegend({ statuses, className }: { statuses: CellStatus[]; 
         return (
           <li key={s} className="inline-flex items-center gap-1" title={m.description}>
             <LegendSwatch status={s} />
-            {m.label}
+            {m.legend ?? m.label}
           </li>
         )
       })}

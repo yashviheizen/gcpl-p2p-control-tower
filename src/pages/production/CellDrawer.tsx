@@ -1,6 +1,6 @@
 import { ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { CELL_META, CellStatusBadge } from '@/components/status'
+import { CELL_META, CellStatusBadge, MONTHLY_PLAN_TIP } from '@/components/status'
 import { AssumptionNote, Drawer, KeyVal, TableWrap, td, tdNum, th, type OriginState } from '@/components/ui'
 import type { Dataset } from '@/data/dataset'
 import type { Unit } from '@/data/types'
@@ -67,7 +67,7 @@ function SingleCell({ ds, c, unit, origin }: { ds: Dataset; c: ProdCell; unit: U
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <CellStatusBadge status={c.status} />
-        <span className="text-body text-ink-muted">{c.reason || meta.description}</span>
+        <span className="text-body text-ink-muted">{c.status === 'monthly' ? MONTHLY_PLAN_TIP : c.reason || meta.description}</span>
       </div>
       <KeyVal
         cols={2}
@@ -169,6 +169,7 @@ function AggCell({ ds, g, unit, origin }: { ds: Dataset; g: GridCell; unit: Unit
         <CellStatusBadge status={g.status} />
         <span className="text-dense text-ink-muted">{g.cells.length} vendor × SKU × day records</span>
       </div>
+      {g.status === 'monthly' && <p className="text-body text-ink-muted">{MONTHLY_PLAN_TIP}</p>}
       <KeyVal
         cols={2}
         items={[

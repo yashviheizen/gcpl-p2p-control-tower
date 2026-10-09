@@ -98,11 +98,13 @@ export interface GridRow {
   monthlyOnly: boolean
 }
 
-/** Status of a group of record cells: uniform non-operating / future groups keep that status. */
+/** Status of a group of record cells: uniform non-operating / future / missing-report groups keep that status. */
 export function groupStatus(ds: Dataset, cells: ProdCell[], agg: ProdAgg): CellStatus {
   if (cells.length === 1) return cells[0].status
   if (cells.length && cells.every((c) => c.status === 'nonOp')) return 'nonOp'
   if (cells.length && cells.every((c) => c.status === 'future' || c.status === 'nonOp')) return 'future'
+  // A missed report stays explicit even where no daily plan is due (monthly-plan vendors), rather than reading as “No plan”.
+  if (cells.some((c) => c.status === 'missing') && cells.every((c) => c.status === 'missing' || c.status === 'nonOp')) return 'missing'
   return aggStatus(ds, agg)
 }
 

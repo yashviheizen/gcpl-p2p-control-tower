@@ -1,7 +1,8 @@
-import { AlertTriangle, ArrowLeft, ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, Grid3x3, Rows3, SearchCode, SearchX, SlidersHorizontal } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowUpRight, CalendarRange, ChevronDown, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, Grid3x3, Rows3, SearchCode, SearchX, SlidersHorizontal } from 'lucide-react'
 import { startTransition, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { CELL_META, CellStatusBadge, LegendSwatch, NotComparedLine, StatusLegend } from '@/components/status'
+import { CELL_META, CellStatusBadge, LegendSwatch, MONTHLY_PLAN_TIP, NotComparedLine, StatusLegend } from '@/components/status'
 import {
   Button,
   Callout,
@@ -193,6 +194,7 @@ function HeatCell({ g, onOpen, label }: { g: GridCell; onOpen: () => void; label
         ·
       </span>
     )
+  if (g.status === 'monthly') return <MonthlyHeatCell onOpen={onOpen} label={label} />
   const m = CELL_META[g.status]
   return (
     <button
@@ -206,8 +208,56 @@ function HeatCell({ g, onOpen, label }: { g: GridCell; onOpen: () => void; label
         m.cell,
       )}
     >
-      {g.status === 'monthly' ? 'Mthly' : cellText(g)}
+      {cellText(g)}
     </button>
+  )
+}
+
+/**
+ * Monthly-plan day: muted cell with a calendar symbol instead of repeated text. The explanation shows on hover and
+ * keyboard focus (and in the cell details on click); the accessible label carries it for screen readers.
+ */
+function MonthlyHeatCell({ onOpen, label }: { onOpen: () => void; label: string }) {
+  const [tip, setTip] = useState<{ x: number; y: number; below: boolean } | null>(null)
+  const show = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect()
+    setTip({ x: r.left + r.width / 2, y: r.top < 48 ? r.bottom + 6 : r.top - 6, below: r.top < 48 })
+  }
+  useEffect(() => {
+    if (!tip) return
+    const hide = () => setTip(null)
+    window.addEventListener('scroll', hide, true)
+    return () => window.removeEventListener('scroll', hide, true)
+  }, [tip])
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`${label}: ${CELL_META.monthly.label}. ${MONTHLY_PLAN_TIP} Open details`}
+        onMouseEnter={(e) => show(e.currentTarget)}
+        onMouseLeave={() => setTip(null)}
+        onFocus={(e) => e.currentTarget.matches(':focus-visible') && show(e.currentTarget)}
+        onBlur={() => setTip(null)}
+        onKeyDown={(e) => e.key === 'Escape' && setTip(null)}
+        style={{ height: 'var(--heat-h)' }}
+        className={cx('flex w-full items-center justify-center rounded-[3px] outline-offset-1 hover:ring-2 hover:ring-accent/40 focus-visible:outline-2 focus-visible:outline-accent', CELL_META.monthly.cell)}
+      >
+        <CalendarRange size={13} strokeWidth={2.25} aria-hidden />
+      </button>
+      {tip &&
+        createPortal(
+          <span
+            aria-hidden
+            data-monthly-tip
+            className="pointer-events-none fixed z-50 max-w-[260px] rounded bg-ink px-2 py-1 text-label text-white shadow-md"
+            style={{ left: tip.x, top: tip.y, transform: `translate(-50%, ${tip.below ? '0' : '-100%'})` }}
+          >
+            {MONTHLY_PLAN_TIP}
+          </span>,
+          document.body,
+        )}
+    </>
   )
 }
 
@@ -222,8 +272,9 @@ function TotalCell({ g, unit, onOpen, label }: { g: GridCell; unit: Unit; onOpen
     >
       {g.status === 'monthly' ? (
         // Monthly-plan rows have no daily comparison: one label across the three sub-columns instead of three clipped ones.
-        <span className="col-span-3 text-info" title="Monthly plan – actual is not compared with a daily target; daily attainment N/A">
-          Monthly plan · not compared
+        <span className="col-span-3 inline-flex items-center justify-end gap-1 text-ink-muted" title={`${MONTHLY_PLAN_TIP} Compared month-to-date in the Monthly-plan vendors table.`}>
+          <CalendarRange size={12} aria-hidden className="text-info" />
+          Not compared
         </span>
       ) : (
         <>
@@ -348,11 +399,14 @@ function EntityCell({ r, onToggle, onViewVendor, focused, origin }: { r: TreeRow
               </span>
             )}
           </div>
-          {(r.level === 'sku' || r.monthlyOnly) && (
-            <div className="pg-sub truncate text-label leading-4">
-              {r.level === 'sku' && <span className="text-ink-subtle">{r.id}</span>}
-              {r.level === 'sku' && r.monthlyOnly && <span className="text-ink-subtle"> · </span>}
-              {r.monthlyOnly && <span className="text-info">Monthly plan</span>}
+          {r.level === 'sku' && <div className="pg-sub truncate text-label leading-4 text-ink-subtle">{r.id}</div>}
+          {/* Shown once, on the vendor row; child rows and day cells carry the calendar symbol only. */}
+          {r.level === 'vendor' && r.monthlyOnly && (
+            <div className="pg-sub flex text-label leading-4">
+              <span className="inline-flex items-center gap-1 rounded-[3px] bg-info-soft/70 px-1 font-medium text-info" title={MONTHLY_PLAN_TIP}>
+                <CalendarRange size={11} strokeWidth={2.25} aria-hidden />
+                Monthly plan
+              </span>
             </div>
           )}
         </div>
@@ -1207,7 +1261,7 @@ export default function Production() {
                         <div key={st} className="grid grid-cols-[176px_minmax(0,1fr)] items-start gap-x-2">
                           <dt className="flex items-center gap-1.5 font-medium text-ink">
                             <LegendSwatch status={st} />
-                            {CELL_META[st].label}
+                            {CELL_META[st].legend ?? CELL_META[st].label}
                           </dt>
                           <dd className="text-ink-muted">{CELL_META[st].description}</dd>
                         </div>
@@ -1244,8 +1298,8 @@ export default function Production() {
                 <span className="inline-flex items-center gap-0.5">
                   Monthly-plan vendors
                   <HelpTip label="About monthly plans">
-                    These vendors plan by month. The plan is not split by day, so daily cells show “Monthly” (daily attainment N/A) and are compared month-to-date here instead. “Operating days elapsed” is context only – it is not used to
-                    derive a daily target.
+                    These vendors plan by month. The plan is not split by day, so heatmap day cells show a calendar symbol (daily attainment N/A) and are compared month-to-date here instead. “Operating days elapsed” is context only – it is
+                    not used to derive a daily target.
                   </HelpTip>
                 </span>
               }
