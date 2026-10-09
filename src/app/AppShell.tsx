@@ -12,6 +12,15 @@ import { isSignedIn, signOut } from '@/lib/session'
 import { logActivity, PERSONAS, store, useAppState, useExceptions, usePermissions } from '@/lib/store'
 import { NAV, ROUTE_PERMS } from './nav'
 
+/** Shows the full label as a tooltip only when the visible label is truncated. */
+function fullLabelIfClipped(e: { currentTarget: HTMLElement }) {
+  const el = e.currentTarget
+  const text = el.querySelector<HTMLElement>('[data-nav-label]')
+  if (!text) return
+  if (text.scrollWidth > text.clientWidth) el.title = text.textContent ?? ''
+  else el.removeAttribute('title')
+}
+
 function Sidebar() {
   const collapsed = useAppState((s) => s.sidebarCollapsed)
   const { can } = usePermissions()
@@ -20,13 +29,14 @@ function Sidebar() {
   const loc = useLocation()
   const isActiveItem = (i: { to: string; end?: boolean }) => (i.end ? loc.pathname === i.to : loc.pathname.startsWith(i.to))
   const activeGroup = NAV.find((g) => g.items.some(isActiveItem))?.id ?? null
-  // Manual expand/collapse; reset whenever the user moves into another section so only the current one is open by default.
-  const [toggled, setToggled] = useState<{
-    group: string | null
-    open: Record<string, boolean>
-  }>({ group: activeGroup, open: {} })
-  const open = toggled.group === activeGroup ? toggled.open : {}
-  const toggleGroup = (id: string, current: boolean) => setToggled({ group: activeGroup, open: { ...open, [id]: !current } })
+  // Manual expand/collapse per section (several can stay open). Entering a section re-opens it so the current page is visible.
+  const [open, setOpen] = useState<Record<string, boolean>>(() => (activeGroup ? { [activeGroup]: true } : {}))
+  const [seenGroup, setSeenGroup] = useState(activeGroup)
+  if (seenGroup !== activeGroup) {
+    setSeenGroup(activeGroup)
+    if (activeGroup && !open[activeGroup]) setOpen({ ...open, [activeGroup]: true })
+  }
+  const toggleGroup = (id: string, current: boolean) => setOpen({ ...open, [id]: !current })
 
   return (
     <nav aria-label="Main navigation" className={cx('flex h-full shrink-0 flex-col border-r border-line bg-nav text-nav-ink transition-[width] duration-150', collapsed ? 'w-[60px]' : 'w-[236px]')}>
@@ -42,40 +52,44 @@ function Sidebar() {
         )}
       </div>
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto py-2">
-        {NAV.map((g) => {
+        {NAV.map((g, gi) => {
           const items = g.items.filter((i) => can(i.perm))
           if (!items.length) return null
-          const hasActive = items.some(isActiveItem)
-          const isOpen = g.label == null || collapsed || (open[g.id] ?? hasActive)
+          const isOpen = g.label == null || collapsed || !!open[g.id]
+          const nested = g.label != null && !collapsed
           const listId = `nav-${g.id}`
           return (
-            <div key={g.id} className={cx('px-2', g.label && 'mt-1')}>
-              {g.label && !collapsed && (
+            // 14px between groups (expanded); the collapsed rail keeps its divider rhythm.
+            <div key={g.id} className={cx('px-2', gi > 0 && !collapsed && 'mt-[14px]')}>
+              {nested && (
                 <button
                   type="button"
                   onClick={() => toggleGroup(g.id, isOpen)}
                   aria-expanded={isOpen}
                   aria-controls={listId}
-                  className={cx('flex h-8 w-full items-center justify-between rounded-md px-2.5 text-dense font-medium hover:bg-nav-hover hover:text-nav-ink-strong', hasActive ? 'text-nav-ink-strong' : 'text-nav-muted')}
+                  className="flex h-7 w-full items-center justify-between rounded-md px-2.5 text-label font-semibold text-ink-muted transition-colors hover:bg-nav-hover hover:text-nav-ink-strong focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
                 >
-                  {g.label}
-                  <ChevronDown size={14} aria-hidden className={cx('transition-transform', !isOpen && '-rotate-90')} />
+                  <span className="truncate">{g.label}</span>
+                  <ChevronDown size={14} aria-hidden className={cx('shrink-0 text-nav-muted transition-transform', !isOpen && '-rotate-90')} />
                 </button>
               )}
               {g.label && collapsed && <div className="mx-2 my-1 border-t border-line" aria-hidden />}
               {isOpen && (
-                <ul id={listId} className={cx(g.label && !collapsed && 'mb-1')}>
+                // Child links sit ~16px right of the section label, beside a thin guide line.
+                <ul id={listId} aria-label={nested ? (g.label ?? undefined) : undefined} className={cx(nested && 'mt-0.5 ml-[9px] space-y-px border-l border-line pl-1.5')}>
                   {items.map((i) => (
                     <li key={i.to}>
                       <NavLink
                         to={i.to}
                         end={i.end}
                         title={collapsed ? i.label : undefined}
+                        onPointerEnter={collapsed ? undefined : fullLabelIfClipped}
+                        onFocus={collapsed ? undefined : fullLabelIfClipped}
                         className={({ isActive }) =>
                           cx(
-                            'relative flex h-8 items-center gap-2.5 rounded-md text-body transition-colors',
-                            collapsed ? 'justify-center' : g.label ? 'pr-2.5 pl-4' : 'px-2.5',
-                            isActive ? 'bg-nav-active font-medium text-nav-active-ink' : 'hover:bg-nav-hover hover:text-nav-ink-strong',
+                            'relative flex h-8 items-center gap-2.5 rounded-md text-body transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent',
+                            collapsed ? 'justify-center' : 'px-2.5',
+                            isActive ? 'bg-nav-active font-medium text-nav-active-ink' : 'text-nav-ink hover:bg-nav-hover hover:text-nav-ink-strong',
                           )
                         }
                       >
@@ -83,7 +97,11 @@ function Sidebar() {
                           <>
                             {isActive && <span aria-hidden className="absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r bg-accent" />}
                             <i.icon size={16} aria-hidden className="shrink-0" />
-                            {!collapsed && <span className="flex-1 truncate">{i.label}</span>}
+                            {!collapsed && (
+                              <span data-nav-label className="min-w-0 flex-1 truncate">
+                                {i.label}
+                              </span>
+                            )}
                             {!collapsed && i.to === '/exceptions' && openCount > 0 && (
                               <span className="num rounded-full bg-black/[0.06] px-1.5 text-label text-nav-ink-strong" aria-label={`${openCount} active exceptions`}>
                                 {openCount}
