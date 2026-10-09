@@ -1,6 +1,6 @@
-import { AlertTriangle, ArrowLeft, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, Focus, Grid3x3, Rows3, SearchCode, SearchX } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { AlertTriangle, ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, Grid3x3, Rows3, SearchCode, SearchX } from 'lucide-react'
+import { startTransition, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { CELL_META, CellStatusBadge, LegendSwatch, NotComparedLine, StatusLegend } from '@/components/status'
 import {
   Button,
@@ -91,6 +91,25 @@ const Muted = ({ children, title }: { children: ReactNode; title?: string }) => 
     {children}
   </span>
 )
+
+/** KPI disclosure body: definition plus the supporting quantities moved off the card. */
+function KpiHelp({ text, rows = [] }: { text: string; rows?: [string, string][] }) {
+  return (
+    <>
+      <span className="block">{text}</span>
+      {rows.length > 0 && (
+        <span className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5 border-t border-line pt-2">
+          {rows.map(([k, v]) => (
+            <span key={k} className="contents">
+              <span className="text-ink-muted">{k}</span>
+              <span className="num text-right font-medium whitespace-nowrap">{v}</span>
+            </span>
+          ))}
+        </span>
+      )}
+    </>
+  )
+}
 
 const MissingChip = () => <span className="rounded-[3px] border border-dashed border-line-strong px-1 text-ink-muted">Report missing</span>
 
@@ -223,6 +242,33 @@ const CHILD_NOUN: Record<DrillLevel, [string, string]> = {
 const childCountText = (r: TreeRow) => (r.childLevel ? `${r.childCount} ${CHILD_NOUN[r.childLevel][r.childCount === 1 ? 0 : 1]}` : '')
 
 const INDENT = 12
+
+/** What "Back to all vendors" restores; kept for this browser session only. */
+interface ReturnState {
+  focus: string
+  prev: string[]
+  open: string
+  idx: number | null
+  mainTop: number
+  gridTop: number
+  gridLeft: number
+}
+const RETURN_KEY = 'gcpl-p2p-production-return'
+function writeReturn(rec: ReturnState) {
+  try {
+    sessionStorage.setItem(RETURN_KEY, JSON.stringify(rec))
+  } catch {
+    /* storage unavailable: Back still works, without scroll restoration */
+  }
+}
+function readReturn(focus: string | null): ReturnState | null {
+  try {
+    const rec = JSON.parse(sessionStorage.getItem(RETURN_KEY) ?? 'null') as ReturnState | null
+    return rec && rec.focus === focus ? rec : null
+  } catch {
+    return null
+  }
+}
 /** Legend items shown inline; the complete legend lives in “Legend & definitions”. */
 const COMMON_LEGEND: CellStatus[] = ['below', 'within', 'above', 'zero', 'missing', 'monthly', 'future']
 
@@ -237,7 +283,7 @@ function ToolGroup({ label, short, first, children }: { label: string; short: st
     </div>
   )
 }
-/** Row action (View vendor / Investigate): overlays the row end on hover or keyboard focus, so it never takes name width. */
+/** SKU row action (Investigate): overlays the row end on hover or keyboard focus, so it never takes name width. */
 const ROW_ACTION =
   'absolute top-1/2 right-0 grid h-6 -translate-y-1/2 place-items-center rounded text-accent-ink opacity-0 shadow-[-6px_0_6px_-2px_var(--color-surface)] group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-accent-soft focus-visible:opacity-100 [@media(hover:none)]:static [@media(hover:none)]:translate-y-0 [@media(hover:none)]:opacity-100'
 /** Heatmap period-total sub-columns: comparable plan, comparable actual, attainment (expand for long values). */
@@ -292,15 +338,21 @@ function EntityCell({ r, onToggle, onViewVendor, focused, origin, periodAtt }: {
         </div>
         {periodAtt}
         {r.level === 'vendor' && !focused && (
+          // Persistent subtle icon; the "View vendor" label slides out over the name end on hover / keyboard focus.
           <button
             type="button"
             onClick={onViewVendor}
-            aria-label={`View vendor ${r.label} (focused analysis)`}
-            title="Open focused analysis for this vendor (sets the global vendor filter). Use the chevron to expand in place."
-            className={cx(ROW_ACTION, rowBg(r), 'grid-flow-col gap-1 px-1.5 text-label font-medium')}
+            aria-label={`View ${r.label} production`}
+            title="View vendor – applies the vendor filter across pages"
+            className="group/va relative grid h-6 w-6 shrink-0 place-items-center rounded-r text-ink-subtle outline-offset-0 group-hover:text-accent-ink hover:bg-accent-soft hover:text-accent-ink focus-visible:bg-accent-soft focus-visible:text-accent-ink [@media(hover:none)]:h-8 [@media(hover:none)]:w-8 [@media(hover:none)]:text-accent-ink"
           >
-            <Focus size={13} aria-hidden />
-            <span aria-hidden>Focus</span>
+            <span
+              aria-hidden
+              className="pointer-events-none absolute top-0 right-full hidden h-full items-center rounded-l bg-accent-soft pr-0.5 pl-1.5 text-label font-medium whitespace-nowrap text-accent-ink shadow-[-6px_0_6px_-2px_var(--color-surface)] group-hover/va:flex group-focus-visible/va:flex"
+            >
+              View vendor
+            </span>
+            <ArrowUpRight size={14} aria-hidden />
           </button>
         )}
         {r.level === 'sku' && (
@@ -447,25 +499,86 @@ export default function Production() {
   const g = tree.grand.agg
   const period = fmtRange(filters.dateFrom, filters.dateTo)
 
-  // Focused vendor analysis = the global vendor filter set to one vendor.
+  // Vendor view = the shared (global) vendor filter set to one vendor. "View vendor" pushes a history entry, so
+  // browser Back and "Back to all vendors" both return to the previous entry with its filters, expanded rows and scroll.
+  const navigate = useNavigate()
   const focusedVendor = filters.vendorIds.length === 1 ? ds.idx.vendor.get(filters.vendorIds[0]) : undefined
   const focusParam = sp.get('focus')
   const canReturn = focusParam != null && focusedVendor?.id === focusParam && sp.has('prev')
   const prevIds = (sp.get('prev') ?? '').split(',').filter(Boolean)
   const prevLabel = prevIds.length === 0 ? 'all vendors' : prevIds.length === 1 ? (ds.idx.vendor.get(prevIds[0])?.name ?? '1 vendor') : `${prevIds.length} vendors`
+  // Last vendor view this page entered. Set synchronously by "View vendor", since the URL commits as a transition after the filter change.
+  const lastFocus = useRef(focusParam)
   const viewVendor = (id: string) => {
-    // `prev` may be empty (= all vendors), so it is set directly rather than through setParam.
+    const main = document.querySelector('main')
+    const rec: ReturnState = {
+      focus: id,
+      prev: filters.vendorIds,
+      open: openParam,
+      idx: (window.history.state as { idx?: number } | null)?.idx ?? null,
+      mainTop: main?.scrollTop ?? 0,
+      gridTop: scrollRef.current?.scrollTop ?? 0,
+      gridLeft: scrollRef.current?.scrollLeft ?? 0,
+    }
+    writeReturn(rec)
+    // `prev` may be empty (= all vendors), so it is set directly. The vendor's immediate child level opens; deeper levels stay collapsed.
     const next = new URLSearchParams(sp)
     next.set('focus', id)
     next.set('prev', filters.vendorIds.join(','))
-    setSp(next, { replace: true, state: undefined })
-    setFilters({ vendorIds: [id] })
-    document.querySelector('main')?.scrollTo({ top: 0 })
+    next.set('open', id)
+    lastFocus.current = id
+    // One transition, so the URL (back link, expanded rows) and the vendor filter (KPIs, header) commit together.
+    startTransition(() => {
+      setSp(next, { state: undefined })
+      setFilters({ vendorIds: [id] })
+    })
+    main?.scrollTo({ top: 0 })
+  }
+  const restoreScroll = (rec: ReturnState | null) => {
+    if (!rec) return
+    // Two frames: filters → tree → fill-height re-render before the saved offsets fit again.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        document.querySelector('main')?.scrollTo({ top: rec.mainTop })
+        scrollRef.current?.scrollTo({ top: rec.gridTop, left: rec.gridLeft })
+      }),
+    )
   }
   const returnToScope = () => {
-    setFilters({ vendorIds: prevIds })
-    setParam({ focus: null, prev: null })
+    const rec = readReturn(focusParam)
+    const idx = (window.history.state as { idx?: number } | null)?.idx
+    if (rec && rec.idx != null && idx === rec.idx + 1) {
+      navigate(-1) // the effect below restores filters and scroll, exactly as browser Back does
+      return
+    }
+    // Opened directly (no previous entry from this page): restore what was saved, if anything.
+    lastFocus.current = null
+    setFilters({ vendorIds: rec?.prev ?? prevIds })
+    setParam({ focus: null, prev: null, open: rec?.open ?? null })
+    restoreScroll(rec)
   }
+  // Browser Back/Forward across a vendor view: keep the shared vendor filter in step with the URL. Handled on
+  // popstate and read from the real URL, because a quick Back can pop before the router has committed the vendor view.
+  useEffect(() => {
+    const onPop = () => {
+      if (!window.location.pathname.endsWith('/production')) return
+      const focus = new URLSearchParams(window.location.search).get('focus')
+      const was = lastFocus.current
+      lastFocus.current = focus
+      const ids = filters.vendorIds
+      if (was === focus) return
+      if (was && !focus && ids.length === 1 && ids[0] === was) {
+        const rec = readReturn(was)
+        setFilters({ vendorIds: rec?.prev ?? [] })
+        restoreScroll(rec)
+      } else if (focus && !(ids.length === 1 && ids[0] === focus)) {
+        setFilters({ vendorIds: [focus] })
+      }
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.vendorIds])
 
   const toggle = (r: TreeRow) => {
     const next = new Set(expanded)
@@ -488,6 +601,8 @@ export default function Production() {
   }
 
   const totalLabel = filters.vendorIds.length ? 'Total in scope' : 'All vendors'
+  // With a single vendor the total row would repeat the vendor row exactly, so it is omitted.
+  const showTotalRow = tree.vendorCount > 1
   const exportCsv = () => {
     const rows: (string | number | null)[][] = [
       [
@@ -554,15 +669,23 @@ export default function Production() {
       <PageHeader
         back={
           canReturn ? (
-            <button type="button" onClick={returnToScope} className="mb-1 inline-flex items-center gap-1 text-dense font-medium text-accent-ink hover:underline">
-              <ArrowLeft size={14} aria-hidden /> Back to {prevLabel}
-            </button>
+            <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-dense">
+              <button type="button" onClick={returnToScope} className="inline-flex items-center gap-1 font-medium text-accent-ink hover:underline">
+                <ArrowLeft size={14} aria-hidden /> Back to {prevLabel}
+              </button>
+              <span aria-hidden className="text-ink-subtle">
+                ·
+              </span>
+              <span role="status" className="text-ink-muted">
+                Vendor filter applied across pages.
+              </span>
+            </div>
           ) : undefined
         }
         title={focusedVendor ? `Production analysis · ${focusedVendor.name}` : 'Production analysis'}
         subtitle={
           <>
-            {focusedVendor ? 'Vendor focus' : filters.vendorIds.length > 1 ? `${filters.vendorIds.length} vendors` : `All vendors (${tree.vendorCount})`} · plan vs actual · {period} · {unit} · actuals through {fmtDate(LATEST_DUE_DATE)}
+            {focusedVendor ? 'Vendor view' : filters.vendorIds.length > 1 ? `${filters.vendorIds.length} vendors` : `All vendors (${tree.vendorCount})`} · plan vs actual · {period} · {unit} · actuals through {fmtDate(LATEST_DUE_DATE)}
           </>
         }
       />
@@ -575,57 +698,69 @@ export default function Production() {
         </Card>
       ) : (
         <>
+          {/* KPI cards: label, value + unit, at most one short status line; supporting detail lives in the (i) disclosure. */}
           <div className="mb-3 grid grid-cols-2 gap-3 lg:grid-cols-5">
             <Kpi
               label="Comparable plan"
               value={fmtQty(g.planComparable, unit)}
               unit={unit}
-              sub={
-                <span className="block truncate" title={`${fmtQty(g.planFuture, unit)} ${unit} plan scheduled after the latest report due date`}>
-                  {fmtQty(g.planFuture, unit)} future · not yet due
-                </span>
-              }
+              sub="Days with a valid report"
               help={
-                <>
-                  Daily plan on days with a valid production report – the attainment denominator. Plan on days whose report is missing ({fmtQty(g.planUnreported, unit)} {unit}) and plan for future dates ({fmtQty(g.planFuture, unit)} {unit})
-                  are kept out and never compared against zero.
-                </>
+                <KpiHelp
+                  text="Daily plan on days with a valid production report – the attainment denominator. Plan without a report and plan for future dates is kept out and never compared against zero."
+                  rows={[
+                    ['Excluded – report missing', `${fmtQty(g.planUnreported, unit)} ${unit}`],
+                    ['Future plan · not yet due', `${fmtQty(g.planFuture, unit)} ${unit}`],
+                  ]}
+                />
               }
             />
             <Kpi
               label="Comparable actual"
               value={fmtQty(g.actualComparable, unit)}
               unit={unit}
-              sub={<span>{g.counts.zero > 0 ? `${g.counts.zero} reported-zero day(s)` : 'Reported days with a daily plan'}</span>}
-              help={<>Reported production on days that have a daily plan, converted per SKU into {unit} before summing. Actual without a daily plan is listed under “Excluded from comparison”.</>}
+              sub="Same days as the plan"
+              help={
+                <KpiHelp
+                  text={`Reported production on days that have a daily plan and a valid report, converted per SKU into ${unit} before summing. Actual without a daily plan is listed under “Excluded from comparison”.`}
+                  rows={[
+                    ['Reported-zero vendor-days', fmtNum(g.counts.zero)],
+                    ['Reported but not compared', `${fmtQty(g.actualUnplanned, unit)} ${unit}`],
+                  ]}
+                />
+              }
             />
             <Kpi
               label="Attainment"
               value={g.attainment == null ? 'N/A' : fmtPct(g.attainment, 1)}
               status={<CellStatusBadge status={tree.grand.status} />}
-              help={
-                <>
-                  Comparable actual ÷ comparable plan × 100. Bands: &lt;{t.low}% below, {t.low}–{t.high}% within, &gt;{t.high}% above (provisional).
-                </>
-              }
+              help={<KpiHelp text={`Comparable actual ÷ comparable plan × 100. Bands (provisional): below ${t.low}% is below plan, ${t.low}–${t.high}% within range, above ${t.high}% above plan.`} />}
             />
-            <Kpi label="Gap vs plan" value={fmtSigned(g.gap, unit)} unit={unit} sub={<span>Comparable actual − plan</span>} help={<>Comparable actual − comparable plan.</>} />
+            <Kpi
+              label="Gap vs plan"
+              value={fmtSigned(g.gap, unit)}
+              unit={unit}
+              sub={g.planComparable > 0 ? (g.gap < 0 ? 'Shortfall' : g.gap > 0 ? 'Ahead of plan' : 'On plan') : 'No comparable plan'}
+              help={<KpiHelp text="Actual minus plan: comparable actual − comparable plan. Negative is a shortfall against plan." />}
+            />
             <div className="col-span-2 grid lg:col-span-1">
               <Kpi
                 label="Run-rate"
                 period={`${fmtMonth(rr.month)} MTD`}
                 value={fmtQty(rr.avgDaily, unit)}
                 unit={`${unit}/day`}
-                sub={
-                  <span className="min-w-0 truncate" title={`Need ${fmtQty(rr.requiredDaily, unit)} ${unit}/day for the month plan · projected ${fmtPct(rr.projectedAttainment)}`}>
-                    Need {fmtQty(rr.requiredDaily, unit)}/day · {fmtPct(rr.projectedAttainment)} proj.
-                  </span>
-                }
+                sub={rr.projectedAttainment == null ? 'Projection N/A' : `Projected ${fmtPct(rr.projectedAttainment)}`}
+                helpAlign="right"
                 help={
-                  <>
-                    Daily-plan vendors in {fmtMonth(rr.month)}, independent of the selected period. Average = MTD actual ÷ {rr.reportedDays} reported operating days. Required = (month plan {fmtNum(rr.monthPlan)} − MTD {fmtNum(rr.mtdActual)}
-                    ) ÷ {rr.remainingDays} remaining operating days. Projected = MTD + average × remaining days.
-                  </>
+                  <KpiHelp
+                    text={`Daily-plan vendors in ${fmtMonth(rr.month)}, independent of the selected period. Average = MTD actual ÷ reported operating days. Required = (month plan − MTD actual) ÷ remaining operating days. Projected = (MTD actual + average × remaining days) ÷ month plan.`}
+                    rows={[
+                      ['Required daily rate', `${fmtQty(rr.requiredDaily, unit)} ${unit}/day`],
+                      ['Month plan', `${fmtQty(rr.monthPlan, unit)} ${unit}`],
+                      ['MTD actual', `${fmtQty(rr.mtdActual, unit)} ${unit}`],
+                      ['Reported / remaining days', `${rr.reportedDays} / ${rr.remainingDays}`],
+                    ]}
+                  />
                 }
               />
             </div>
@@ -729,7 +864,7 @@ export default function Production() {
                   fillRef.current = el
                 }}
                 className="scroll-thin relative max-w-full overflow-auto"
-                style={{ maxHeight: fillH ?? 'calc(100vh - 300px)', minHeight: 200 }}
+                style={{ maxHeight: fillH ?? 'calc(100vh - 300px)' }}
               >
                 <table className="min-w-full border-separate border-spacing-0">
                   <thead>
@@ -849,73 +984,74 @@ export default function Production() {
                       </tbody>
                     ))
                   )}
-                  {view === 'heatmap' ? (
-                    <tfoot>
-                      <tr>
-                        <td className={cx(td, 'sticky bottom-0 left-0 z-[15] border-t-2 border-r border-t-line-strong bg-surface-muted py-1 font-semibold')}>
-                          {totalLabel} <span className="font-normal text-ink-muted">({tree.vendorCount})</span>
-                        </td>
-                        {columns.map((c, i) => (
-                          <td key={c.key} className="sticky bottom-0 z-[6] border-t-2 border-t-line-strong bg-surface-muted px-[2px] py-[4px]">
-                            <HeatCell g={tree.colTotals[i]} label={`${totalLabel}, ${c.label}`} onOpen={() => openCell(null, c, tree.colTotals[i])} />
+                  {showTotalRow &&
+                    (view === 'heatmap' ? (
+                      <tfoot>
+                        <tr>
+                          <td className={cx(td, 'sticky bottom-0 left-0 z-[15] border-t-2 border-r border-t-line-strong bg-surface-muted py-1 font-semibold')}>
+                            {totalLabel} <span className="font-normal text-ink-muted">({tree.vendorCount})</span>
                           </td>
-                        ))}
-                        <td aria-hidden className="sticky bottom-0 z-[6] w-full border-t-2 border-t-line-strong bg-surface-muted p-0" />
-                        <td className={cx(stickyR, 'bottom-0 z-[15] border-t-2 border-t-line-strong bg-surface-muted px-2.5 py-1 font-semibold')}>
-                          <TotalCell g={tree.grand} unit={unit} label={totalLabel} onOpen={() => openCell(null, null, tree.grand)} />
-                        </td>
-                      </tr>
-                    </tfoot>
-                  ) : (
-                    <tfoot>
-                      {metrics.map((metric, mi) => {
-                        const top = mi === 0 ? 'border-t-2 border-t-line-strong' : ''
-                        return (
-                          <tr key={metric} className="bg-surface-muted">
-                            {mi === 0 && (
-                              <td rowSpan={metrics.length} className={cx('sticky left-0 z-[5] bg-surface-muted py-[var(--cell-py)] pr-1 pl-2.5 align-top', ENTITY_W, top)}>
-                                <div className="flex items-start justify-between gap-2">
-                                  <span className="text-body font-semibold">
-                                    {totalLabel} <span className="font-normal text-ink-muted">({tree.vendorCount})</span>
-                                  </span>
-                                  {!showAtt && <PeriodAttBadge g={tree.grand} label={totalLabel} onOpen={() => openCell(null, null, tree.grand)} />}
-                                </div>
-                              </td>
-                            )}
-                            <th scope="row" className={cx('sticky z-[5] border-r border-line bg-surface-muted px-2.5 py-[var(--cell-py)] text-left text-label font-medium whitespace-nowrap text-ink-muted', METRIC_LEFT, METRIC_W, top)}>
-                              {METRIC_LABEL[metric]}
-                            </th>
-                            {columns.map((c, i) => {
-                              const cell = tree.colTotals[i]
-                              return (
-                                <td key={c.key} className={cx('num px-2.5 py-[var(--cell-py)] text-right text-dense font-medium whitespace-nowrap', colW, top)}>
-                                  <button
-                                    type="button"
-                                    onClick={() => openCell(null, c, cell)}
-                                    aria-label={`${totalLabel}, ${c.label}, ${METRIC_LABEL[metric].toLowerCase()}: ${describe(cell, unit)}. Open details`}
-                                    className="-mx-1 rounded px-1 hover:bg-accent-soft"
-                                  >
-                                    <MetricValue metric={metric} g={cell} unit={unit} />
-                                  </button>
-                                </td>
-                              )
-                            })}
-                            <td aria-hidden className={cx('w-full p-0', top)} />
-                            <td className={cx(stickyR, 'num z-[5] bg-surface-muted px-2.5 py-[var(--cell-py)] text-right text-dense font-semibold whitespace-nowrap', top)}>
-                              <button
-                                type="button"
-                                onClick={() => openCell(null, null, tree.grand)}
-                                aria-label={`${totalLabel}, period ${METRIC_LABEL[metric].toLowerCase()}: ${describe(tree.grand, unit)}. Open details`}
-                                className="-mx-1 rounded px-1 hover:bg-accent-soft"
-                              >
-                                <MetricValue metric={metric} g={tree.grand} unit={unit} />
-                              </button>
+                          {columns.map((c, i) => (
+                            <td key={c.key} className="sticky bottom-0 z-[6] border-t-2 border-t-line-strong bg-surface-muted px-[2px] py-[4px]">
+                              <HeatCell g={tree.colTotals[i]} label={`${totalLabel}, ${c.label}`} onOpen={() => openCell(null, c, tree.colTotals[i])} />
                             </td>
-                          </tr>
-                        )
-                      })}
-                    </tfoot>
-                  )}
+                          ))}
+                          <td aria-hidden className="sticky bottom-0 z-[6] w-full border-t-2 border-t-line-strong bg-surface-muted p-0" />
+                          <td className={cx(stickyR, 'bottom-0 z-[15] border-t-2 border-t-line-strong bg-surface-muted px-2.5 py-1 font-semibold')}>
+                            <TotalCell g={tree.grand} unit={unit} label={totalLabel} onOpen={() => openCell(null, null, tree.grand)} />
+                          </td>
+                        </tr>
+                      </tfoot>
+                    ) : (
+                      <tfoot>
+                        {metrics.map((metric, mi) => {
+                          const top = mi === 0 ? 'border-t-2 border-t-line-strong' : ''
+                          return (
+                            <tr key={metric} className="bg-surface-muted">
+                              {mi === 0 && (
+                                <td rowSpan={metrics.length} className={cx('sticky left-0 z-[5] bg-surface-muted py-[var(--cell-py)] pr-1 pl-2.5 align-top', ENTITY_W, top)}>
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="text-body font-semibold">
+                                      {totalLabel} <span className="font-normal text-ink-muted">({tree.vendorCount})</span>
+                                    </span>
+                                    {!showAtt && <PeriodAttBadge g={tree.grand} label={totalLabel} onOpen={() => openCell(null, null, tree.grand)} />}
+                                  </div>
+                                </td>
+                              )}
+                              <th scope="row" className={cx('sticky z-[5] border-r border-line bg-surface-muted px-2.5 py-[var(--cell-py)] text-left text-label font-medium whitespace-nowrap text-ink-muted', METRIC_LEFT, METRIC_W, top)}>
+                                {METRIC_LABEL[metric]}
+                              </th>
+                              {columns.map((c, i) => {
+                                const cell = tree.colTotals[i]
+                                return (
+                                  <td key={c.key} className={cx('num px-2.5 py-[var(--cell-py)] text-right text-dense font-medium whitespace-nowrap', colW, top)}>
+                                    <button
+                                      type="button"
+                                      onClick={() => openCell(null, c, cell)}
+                                      aria-label={`${totalLabel}, ${c.label}, ${METRIC_LABEL[metric].toLowerCase()}: ${describe(cell, unit)}. Open details`}
+                                      className="-mx-1 rounded px-1 hover:bg-accent-soft"
+                                    >
+                                      <MetricValue metric={metric} g={cell} unit={unit} />
+                                    </button>
+                                  </td>
+                                )
+                              })}
+                              <td aria-hidden className={cx('w-full p-0', top)} />
+                              <td className={cx(stickyR, 'num z-[5] bg-surface-muted px-2.5 py-[var(--cell-py)] text-right text-dense font-semibold whitespace-nowrap', top)}>
+                                <button
+                                  type="button"
+                                  onClick={() => openCell(null, null, tree.grand)}
+                                  aria-label={`${totalLabel}, period ${METRIC_LABEL[metric].toLowerCase()}: ${describe(tree.grand, unit)}. Open details`}
+                                  className="-mx-1 rounded px-1 hover:bg-accent-soft"
+                                >
+                                  <MetricValue metric={metric} g={tree.grand} unit={unit} />
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tfoot>
+                    ))}
                 </table>
               </div>
               {canScrollRight && <div aria-hidden className={cx('pointer-events-none absolute top-0 bottom-0 w-6 bg-gradient-to-l from-black/[0.06] to-transparent', '')} style={{ right: totalW_px }} />}

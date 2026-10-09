@@ -189,7 +189,7 @@ export function HelpTip({ label = 'How is this calculated?', children, align = '
           role="dialog"
           aria-label={label}
           className={cx(
-            'absolute top-7 z-40 w-[320px] max-w-[80vw] rounded-md border border-line bg-surface p-3 text-left text-dense leading-[1.5] font-normal tracking-normal text-ink normal-case shadow-[var(--shadow-pop)]',
+            'absolute top-7 z-40 w-[320px] max-w-[80vw] rounded-md border border-line bg-surface p-3 text-left text-dense leading-[1.5] font-normal tracking-normal whitespace-normal text-ink normal-case shadow-[var(--shadow-pop)]',
             align === 'right' ? 'right-0' : 'left-0',
           )}
         >
@@ -201,19 +201,43 @@ export function HelpTip({ label = 'How is this calculated?', children, align = '
 }
 
 // ── KPI tile ───────────────────────────────────────────────────────────────
-export function Kpi({ label, value, unit, sub, period, help, status, to }: { label: string; value: ReactNode; unit?: string; sub?: ReactNode; period?: string; help?: ReactNode; status?: ReactNode; to?: string }) {
+export function Kpi({
+  label,
+  value,
+  unit,
+  sub,
+  period,
+  help,
+  helpAlign,
+  status,
+  to,
+}: {
+  label: string
+  value: ReactNode
+  unit?: string
+  sub?: ReactNode
+  period?: string
+  help?: ReactNode
+  helpAlign?: 'left' | 'right'
+  status?: ReactNode
+  to?: string
+}) {
   const body = (
     <>
       <div className="flex items-center justify-between gap-1">
-        <span className="flex items-center gap-0.5 text-dense font-medium text-ink-muted">
+        <span className="flex min-w-0 items-center gap-0.5 text-dense font-medium whitespace-nowrap text-ink-muted">
           {label}
-          {help && <HelpTip label={`How ${label} is calculated`}>{help}</HelpTip>}
+          {help && (
+            <HelpTip label={`How ${label} is calculated`} align={helpAlign}>
+              {help}
+            </HelpTip>
+          )}
         </span>
-        {period && <span className="text-label text-ink-subtle">{period}</span>}
+        {period && <span className="shrink-0 text-label whitespace-nowrap text-ink-subtle">{period}</span>}
       </div>
       <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1">
-        <span className="num text-kpi font-semibold text-ink">{value}</span>
-        {unit && <span className="text-dense text-ink-subtle">{unit}</span>}
+        <span className="num text-kpi font-semibold whitespace-nowrap text-ink">{value}</span>
+        {unit && <span className="text-dense whitespace-nowrap text-ink-subtle">{unit}</span>}
       </div>
       <div className="mt-1 flex min-h-[18px] flex-wrap items-center gap-1.5 text-label text-ink-subtle">
         {status}
