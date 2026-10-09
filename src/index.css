@@ -131,6 +131,50 @@
   --row-h: 46px;
 }
 
+/*
+ * Production heatmap / Table view (.pg): slightly smaller type and padding in Compact only.
+ * Unlayered so it overrides the utility classes those cells keep for Comfortable, which is unchanged.
+ * Names and values stay 12px; codes, counts and helper labels 11px.
+ */
+:root:not([data-density='comfortable']) .pg {
+  --th-py: 5px;
+  --cell-py: 6px;
+  --heat-h: 26px;
+  & .pg-name {
+    font-size: 12px;
+    line-height: 16px;
+  }
+  & .pg-num {
+    font-size: 12px;
+    line-height: 16px;
+  }
+  & .pg-sub {
+    font-size: 11px;
+    line-height: 13px;
+  }
+  & .pg-px {
+    padding-inline: 8px;
+  }
+  & .pg-entity {
+    padding-block: 2px;
+  }
+  & .pg-heat {
+    padding-block: 3px;
+  }
+  /* Smaller line boxes would shrink inline value buttons; keep a 24px hit area without changing the layout. */
+  & .pg-hit {
+    position: relative;
+    &::after {
+      content: '';
+      position: absolute;
+      inset: -4px 0;
+    }
+  }
+  & th.pg-sub {
+    line-height: 16px;
+  }
+}
+
 @layer components {
   .hatch {
     background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgba(82, 82, 91, 0.16) 4px 5px);

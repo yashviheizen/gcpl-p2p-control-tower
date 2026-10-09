@@ -201,7 +201,10 @@ function HeatCell({ g, onOpen, label }: { g: GridCell; onOpen: () => void; label
       aria-label={`${label}: ${m.label}${g.agg.attainment != null ? `, attainment ${fmtPct(g.agg.attainment)}` : ''}. Open details`}
       title={m.label}
       style={{ height: 'var(--heat-h)' }}
-      className={cx('num flex w-full items-center justify-center rounded-[3px] text-label font-medium whitespace-nowrap outline-offset-1 hover:ring-2 hover:ring-accent/40 focus-visible:outline-2 focus-visible:outline-accent', m.cell)}
+      className={cx(
+        'pg-num num flex w-full items-center justify-center rounded-[3px] text-label font-medium whitespace-nowrap outline-offset-1 hover:ring-2 hover:ring-accent/40 focus-visible:outline-2 focus-visible:outline-accent',
+        m.cell,
+      )}
     >
       {g.status === 'monthly' ? 'Mthly' : cellText(g)}
     </button>
@@ -211,7 +214,12 @@ function HeatCell({ g, onOpen, label }: { g: GridCell; onOpen: () => void; label
 /** Heatmap period total: comparable plan, comparable actual, attainment – the KPI basis. */
 function TotalCell({ g, unit, onOpen, label }: { g: GridCell; unit: Unit; onOpen: () => void; label: string }) {
   return (
-    <button type="button" onClick={onOpen} className={cx('grid w-full items-center gap-3 rounded text-right text-dense hover:bg-accent-soft/60', TOTAL_GRID)} aria-label={`${label}, period total: ${describe(g, unit)}. Open details`}>
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cx('pg-num pg-hit grid w-full items-center gap-3 rounded text-right text-dense hover:bg-accent-soft/60', TOTAL_GRID)}
+      aria-label={`${label}, period total: ${describe(g, unit)}. Open details`}
+    >
       {g.status === 'monthly' ? (
         // Monthly-plan rows have no daily comparison: one label across the three sub-columns instead of three clipped ones.
         <span className="col-span-3 text-info" title="Monthly plan – actual is not compared with a daily target; daily attainment N/A">
@@ -320,28 +328,28 @@ function EntityCell({ r, onToggle, onViewVendor, focused, origin }: { r: TreeRow
         )}
         <div className="min-w-0 flex-1">
           <div className="relative flex items-baseline gap-1.5">
-            <span className={cx('min-w-0 truncate leading-4', r.depth === 0 ? 'text-body font-semibold text-ink' : 'text-dense text-ink')} title={r.level === 'sku' ? `${r.label} · ${r.id}` : `${LEVEL_LABEL[r.level]}: ${r.label}`}>
+            <span className={cx('pg-name min-w-0 truncate leading-4', r.depth === 0 ? 'text-body font-semibold text-ink' : 'text-dense text-ink')} title={r.level === 'sku' ? `${r.label} · ${r.id}` : `${LEVEL_LABEL[r.level]}: ${r.label}`}>
               {name}
             </span>
             {/* Full name while a row control has keyboard focus (hover uses the native title). */}
             <span
               aria-hidden
               className={cx(
-                'pointer-events-none absolute top-1/2 left-0 z-30 hidden -translate-y-1/2 rounded bg-surface px-1 py-0.5 leading-4 whitespace-nowrap shadow-[var(--shadow-pop)] group-has-[:focus-visible]/ent:block',
+                'pg-name pointer-events-none absolute top-1/2 left-0 z-30 hidden -translate-y-1/2 rounded bg-surface px-1 py-0.5 leading-4 whitespace-nowrap shadow-[var(--shadow-pop)] group-has-[:focus-visible]/ent:block',
                 r.depth === 0 ? '-ml-1 text-body font-semibold text-ink' : '-ml-1 text-dense text-ink',
               )}
             >
               {name}
             </span>
             {r.expandable && (
-              <span className="shrink-0 text-label font-normal whitespace-nowrap text-ink-subtle" title={count}>
+              <span className="pg-sub shrink-0 text-label font-normal whitespace-nowrap text-ink-subtle" title={count}>
                 {r.childCount}
                 <span className="sr-only"> {CHILD_NOUN[r.childLevel!][r.childCount === 1 ? 0 : 1]}</span>
               </span>
             )}
           </div>
           {(r.level === 'sku' || r.monthlyOnly) && (
-            <div className="truncate text-label leading-4">
+            <div className="pg-sub truncate text-label leading-4">
               {r.level === 'sku' && <span className="text-ink-subtle">{r.id}</span>}
               {r.level === 'sku' && r.monthlyOnly && <span className="text-ink-subtle"> · </span>}
               {r.monthlyOnly && <span className="text-info">Monthly plan</span>}
@@ -384,7 +392,7 @@ function PeriodAttBadge({ g, onOpen, label }: { g: GridCell; onOpen: () => void;
       onClick={onOpen}
       title="Period attainment (comparable basis)"
       aria-label={`${label}, period attainment: ${g.agg.attainment != null ? fmtPct(g.agg.attainment) : 'N/A'}. Open details`}
-      className="num -mx-1 rounded px-1 text-dense hover:bg-accent-soft"
+      className="pg-num pg-hit num -mx-1 rounded px-1 text-dense hover:bg-accent-soft"
     >
       <AttText g={g} />
     </button>
@@ -967,7 +975,7 @@ export default function Production() {
                   scrollRef.current = el
                   fillRef.current = el
                 }}
-                className="scroll-thin relative max-w-full overflow-auto"
+                className="pg scroll-thin relative max-w-full overflow-auto"
                 style={{ maxHeight: fillH ?? 'calc(100vh - 300px)' }}
               >
                 <table className="min-w-full border-separate border-spacing-0">
@@ -980,7 +988,7 @@ export default function Production() {
                           {grain === 'day' ? (
                             <span className="text-label leading-4 whitespace-nowrap" title={`${c.sub} ${c.label}`}>
                               {/* Compact heatmap headers name the month on the first column and wherever a new month starts. */}
-                              <span className="font-normal text-ink-subtle">{c.sub}</span> <span className="font-medium">{view === 'heatmap' && i > 0 && c.key.slice(8) !== '01' ? +c.key.slice(8) : c.label}</span>
+                              <span className="pg-sub font-normal text-ink-subtle">{c.sub}</span> <span className="font-medium">{view === 'heatmap' && i > 0 && c.key.slice(8) !== '01' ? +c.key.slice(8) : c.label}</span>
                             </span>
                           ) : (
                             <span className={cx('text-label leading-4 font-medium whitespace-nowrap', c.partial && 'text-warn')} title={c.sub}>
@@ -1017,16 +1025,16 @@ export default function Production() {
                     <tbody>
                       {tree.rows.map((r, ri) => (
                         <tr key={r.key} className="group">
-                          <td data-key={r.key} data-depth={r.depth} className={cx('sticky left-0 z-[5] border-r border-line py-0.5 pr-1 pl-2.5 align-middle', ENTITY_W, rowBg(r), groupTop(r, ri))}>
+                          <td data-key={r.key} data-depth={r.depth} className={cx('pg-entity sticky left-0 z-[5] border-r border-line py-0.5 pr-1 pl-2.5 align-middle', ENTITY_W, rowBg(r), groupTop(r, ri))}>
                             <EntityCell r={r} onToggle={() => toggle(r)} onViewVendor={() => viewVendor(r.id)} focused={!!focusedVendor} origin={origin} />
                           </td>
                           {columns.map((c, i) => (
-                            <td key={c.key} className={cx('px-[2px] py-[4px] align-middle', colW, rowBg(r), groupTop(r, ri))}>
+                            <td key={c.key} className={cx('pg-heat px-[2px] py-[4px] align-middle', colW, rowBg(r), groupTop(r, ri))}>
                               <HeatCell g={r.byCol[i]} label={`${r.label}, ${c.label}`} onOpen={() => openCell(r, c, r.byCol[i])} />
                             </td>
                           ))}
                           <td aria-hidden className={cx('w-full p-0', rowBg(r), groupTop(r, ri))} />
-                          <td className={cx(stickyR, 'z-[5] px-2.5 py-0.5', rowBg(r), groupTop(r, ri))}>
+                          <td className={cx(stickyR, 'pg-entity pg-px z-[5] px-2.5 py-0.5', rowBg(r), groupTop(r, ri))}>
                             <TotalCell g={r.total} unit={unit} label={r.label} onOpen={() => openRowTotal(r)} />
                           </td>
                         </tr>
@@ -1040,23 +1048,26 @@ export default function Production() {
                           return (
                             <tr key={metric}>
                               {mi === 0 && (
-                                <td rowSpan={metrics.length} data-key={r.key} data-depth={r.depth} className={cx('sticky left-0 z-[5] py-[var(--cell-py)] pr-1 pl-2.5 align-top', ENTITY_W, rowBg(r), top)}>
+                                <td rowSpan={metrics.length} data-key={r.key} data-depth={r.depth} className={cx('pg-entity sticky left-0 z-[5] py-[var(--cell-py)] pr-1 pl-2.5 align-top', ENTITY_W, rowBg(r), top)}>
                                   <EntityCell r={r} onToggle={() => toggle(r)} onViewVendor={() => viewVendor(r.id)} focused={!!focusedVendor} origin={origin} />
                                 </td>
                               )}
-                              <th scope="row" className={cx('sticky z-[5] border-r border-line px-2.5 py-[var(--cell-py)] text-left text-label font-medium whitespace-nowrap text-ink-muted', METRIC_LEFT, METRIC_W, rowBg(r), top)}>
+                              <th
+                                scope="row"
+                                className={cx('pg-sub pg-px sticky z-[5] border-r border-line px-2.5 py-[var(--cell-py)] text-left text-label font-medium whitespace-nowrap text-ink-muted', METRIC_LEFT, METRIC_W, rowBg(r), top)}
+                              >
                                 {METRIC_LABEL[metric]}
                               </th>
                               {columns.map((c, i) => {
                                 const cell = r.byCol[i]
                                 return (
-                                  <td key={c.key} className={cx('num px-2.5 py-[var(--cell-py)] text-right text-dense whitespace-nowrap', colW, rowBg(r), top)}>
+                                  <td key={c.key} className={cx('pg-num pg-px num px-2.5 py-[var(--cell-py)] text-right text-dense whitespace-nowrap', colW, rowBg(r), top)}>
                                     {cell.cells.length ? (
                                       <button
                                         type="button"
                                         onClick={() => openCell(r, c, cell)}
                                         aria-label={`${r.label}, ${c.label}, ${METRIC_LABEL[metric].toLowerCase()}: ${describe(cell, unit)}. Open details`}
-                                        className="-mx-1 rounded px-1 text-right hover:bg-accent-soft"
+                                        className="pg-hit -mx-1 rounded px-1 text-right hover:bg-accent-soft"
                                       >
                                         <MetricValue metric={metric} g={cell} unit={unit} />
                                       </button>
@@ -1067,18 +1078,18 @@ export default function Production() {
                                 )
                               })}
                               <td aria-hidden className={cx('w-full p-0', rowBg(r), top)} />
-                              <td className={cx(stickyR, 'num z-[5] px-2.5 py-[var(--cell-py)] text-right text-dense font-medium whitespace-nowrap', rowBg(r), top)}>
+                              <td className={cx(stickyR, 'pg-num pg-px num z-[5] px-2.5 py-[var(--cell-py)] text-right text-dense font-medium whitespace-nowrap', rowBg(r), top)}>
                                 <button
                                   type="button"
                                   onClick={() => openRowTotal(r)}
                                   aria-label={`${r.label}, period ${METRIC_LABEL[metric].toLowerCase()}: ${describe(r.total, unit)}. Open details`}
-                                  className="-mx-1 rounded px-1 hover:bg-accent-soft"
+                                  className="pg-hit -mx-1 rounded px-1 hover:bg-accent-soft"
                                 >
                                   <MetricValue metric={metric} g={r.total} unit={unit} />
                                 </button>
                               </td>
                               {mi === 0 && (
-                                <td rowSpan={metrics.length} className={cx(attCol, 'z-[5] px-2.5 py-[var(--cell-py)] text-right align-top whitespace-nowrap', rowBg(r), top)}>
+                                <td rowSpan={metrics.length} className={cx(attCol, 'pg-px z-[5] px-2.5 py-[var(--cell-py)] text-right align-top whitespace-nowrap', rowBg(r), top)}>
                                   <PeriodAttBadge g={r.total} label={r.label} onOpen={() => openRowTotal(r)} />
                                 </td>
                               )}
@@ -1092,16 +1103,16 @@ export default function Production() {
                     (view === 'heatmap' ? (
                       <tfoot>
                         <tr>
-                          <td className={cx(td, 'sticky bottom-0 left-0 z-[15] border-t-2 border-r border-t-line-strong bg-surface-muted py-1 font-semibold')}>
+                          <td className={cx(td, 'pg-num sticky bottom-0 left-0 z-[15] border-t-2 border-r border-t-line-strong bg-surface-muted py-1 font-semibold')}>
                             {totalLabel} <span className="font-normal text-ink-muted">({tree.vendorCount})</span>
                           </td>
                           {columns.map((c, i) => (
-                            <td key={c.key} className="sticky bottom-0 z-[6] border-t-2 border-t-line-strong bg-surface-muted px-[2px] py-[4px]">
+                            <td key={c.key} className="pg-heat sticky bottom-0 z-[6] border-t-2 border-t-line-strong bg-surface-muted px-[2px] py-[4px]">
                               <HeatCell g={tree.colTotals[i]} label={`${totalLabel}, ${c.label}`} onOpen={() => openCell(null, c, tree.colTotals[i])} />
                             </td>
                           ))}
                           <td aria-hidden className="sticky bottom-0 z-[6] w-full border-t-2 border-t-line-strong bg-surface-muted p-0" />
-                          <td className={cx(stickyR, 'bottom-0 z-[15] border-t-2 border-t-line-strong bg-surface-muted px-2.5 py-1 font-semibold')}>
+                          <td className={cx(stickyR, 'pg-px bottom-0 z-[15] border-t-2 border-t-line-strong bg-surface-muted px-2.5 py-1 font-semibold')}>
                             <TotalCell g={tree.grand} unit={unit} label={totalLabel} onOpen={() => openCell(null, null, tree.grand)} />
                           </td>
                         </tr>
@@ -1114,23 +1125,26 @@ export default function Production() {
                             <tr key={metric} className="bg-surface-muted">
                               {mi === 0 && (
                                 <td rowSpan={metrics.length} className={cx('sticky left-0 z-[5] bg-surface-muted py-[var(--cell-py)] pr-1 pl-2.5 align-top', ENTITY_W, top)}>
-                                  <span className="text-body font-semibold">
+                                  <span className="pg-name text-body font-semibold">
                                     {totalLabel} <span className="font-normal text-ink-muted">({tree.vendorCount})</span>
                                   </span>
                                 </td>
                               )}
-                              <th scope="row" className={cx('sticky z-[5] border-r border-line bg-surface-muted px-2.5 py-[var(--cell-py)] text-left text-label font-medium whitespace-nowrap text-ink-muted', METRIC_LEFT, METRIC_W, top)}>
+                              <th
+                                scope="row"
+                                className={cx('pg-sub pg-px sticky z-[5] border-r border-line bg-surface-muted px-2.5 py-[var(--cell-py)] text-left text-label font-medium whitespace-nowrap text-ink-muted', METRIC_LEFT, METRIC_W, top)}
+                              >
                                 {METRIC_LABEL[metric]}
                               </th>
                               {columns.map((c, i) => {
                                 const cell = tree.colTotals[i]
                                 return (
-                                  <td key={c.key} className={cx('num px-2.5 py-[var(--cell-py)] text-right text-dense font-medium whitespace-nowrap', colW, top)}>
+                                  <td key={c.key} className={cx('pg-num pg-px num px-2.5 py-[var(--cell-py)] text-right text-dense font-medium whitespace-nowrap', colW, top)}>
                                     <button
                                       type="button"
                                       onClick={() => openCell(null, c, cell)}
                                       aria-label={`${totalLabel}, ${c.label}, ${METRIC_LABEL[metric].toLowerCase()}: ${describe(cell, unit)}. Open details`}
-                                      className="-mx-1 rounded px-1 hover:bg-accent-soft"
+                                      className="pg-hit -mx-1 rounded px-1 hover:bg-accent-soft"
                                     >
                                       <MetricValue metric={metric} g={cell} unit={unit} />
                                     </button>
@@ -1138,18 +1152,18 @@ export default function Production() {
                                 )
                               })}
                               <td aria-hidden className={cx('w-full p-0', top)} />
-                              <td className={cx(stickyR, 'num z-[5] bg-surface-muted px-2.5 py-[var(--cell-py)] text-right text-dense font-semibold whitespace-nowrap', top)}>
+                              <td className={cx(stickyR, 'pg-num pg-px num z-[5] bg-surface-muted px-2.5 py-[var(--cell-py)] text-right text-dense font-semibold whitespace-nowrap', top)}>
                                 <button
                                   type="button"
                                   onClick={() => openCell(null, null, tree.grand)}
                                   aria-label={`${totalLabel}, period ${METRIC_LABEL[metric].toLowerCase()}: ${describe(tree.grand, unit)}. Open details`}
-                                  className="-mx-1 rounded px-1 hover:bg-accent-soft"
+                                  className="pg-hit -mx-1 rounded px-1 hover:bg-accent-soft"
                                 >
                                   <MetricValue metric={metric} g={tree.grand} unit={unit} />
                                 </button>
                               </td>
                               {mi === 0 && (
-                                <td rowSpan={metrics.length} className={cx(attCol, 'z-[5] bg-surface-muted px-2.5 py-[var(--cell-py)] text-right align-top font-semibold whitespace-nowrap', top)}>
+                                <td rowSpan={metrics.length} className={cx(attCol, 'pg-px z-[5] bg-surface-muted px-2.5 py-[var(--cell-py)] text-right align-top font-semibold whitespace-nowrap', top)}>
                                   <PeriodAttBadge g={tree.grand} label={totalLabel} onOpen={() => openCell(null, null, tree.grand)} />
                                 </td>
                               )}
