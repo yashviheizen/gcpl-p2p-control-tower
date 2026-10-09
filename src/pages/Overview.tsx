@@ -166,7 +166,7 @@ export default function Overview() {
           value={fmtQty(agg.planComparable, unit)}
           unit={unit}
           help={<>Daily plan on vendor-days that have a valid production report. Plan on days with a missing/rejected report and on future days is excluded, so attainment is not distorted. Monthly plans are not split by day.</>}
-          sub="Daily-plan vendor-days with a valid report"
+          sub="Days with a valid report"
           to={filterLink('/production', {})}
         />
         <Kpi
@@ -174,7 +174,7 @@ export default function Overview() {
           value={fmtQty(agg.actualComparable, unit)}
           unit={unit}
           help="Reported production on the same vendor-days as comparable plan. Missing reports are never counted as zero."
-          sub={agg.counts.zero > 0 ? `Includes ${agg.counts.zero} reported-zero vendor-day${agg.counts.zero === 1 ? '' : 's'}` : 'Same vendor-days as comparable plan'}
+          sub={agg.counts.zero > 0 ? `Incl. ${agg.counts.zero} reported zero` : 'Same days as the plan'}
           to={filterLink('/production', {})}
         />
         <Kpi
@@ -187,7 +187,13 @@ export default function Overview() {
             </>
           }
         />
-        <Kpi label="Gap vs plan" value={fmtSigned(agg.gap, unit)} unit={unit} help="Comparable actual − comparable plan." sub={agg.gap < 0 ? 'Shortfall against plan' : agg.gap > 0 ? 'Over plan – review' : undefined} />
+        <Kpi
+          label="Gap vs plan"
+          value={fmtSigned(agg.gap, unit)}
+          unit={unit}
+          help="Comparable actual − comparable plan."
+          sub={agg.planComparable > 0 ? (agg.gap < 0 ? 'Shortfall' : agg.gap > 0 ? 'Ahead of plan' : 'On plan') : 'No comparable plan'}
+        />
       </div>
       <NotComparedLine agg={agg} unit={unit} className="mb-6" />
       {agg.excluded.length > 0 && <AssumptionNote className="-mt-4 mb-6">MT totals exclude {agg.excluded.map((e) => e.skuCode).join(', ')} – no kg/EA weight in master data.</AssumptionNote>}

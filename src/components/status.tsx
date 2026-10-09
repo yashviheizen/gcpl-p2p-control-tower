@@ -202,7 +202,7 @@ export function StatusLegend({ statuses, className }: { statuses: CellStatus[]; 
 
 /**
  * Compact disclosure for quantities kept out of the comparable basis:
- * “Excluded from comparison: <derived summary> · View breakdown”. `extra` sits on the same line
+ * “Some data excluded · N reasons · View breakdown”. `extra` sits on the same line
  * (e.g. missing/stale report warnings, which must stay visible).
  */
 export function NotComparedLine({ agg, unit, className, extra }: { agg: ProdAgg; unit: Unit; className?: string; extra?: ReactNode }) {
@@ -213,14 +213,18 @@ export function NotComparedLine({ agg, unit, className, extra }: { agg: ProdAgg;
   ].filter((p) => p.v > 0)
   const has = parts.length > 0 || agg.planUnreported > 0
   if (!has && !extra) return null
-  const summary = [parts.length > 0 && `${fmtQty(agg.actualUnplanned, unit)} ${unit} actual`, agg.planUnreported > 0 && `${fmtQty(agg.planUnreported, unit)} ${unit} plan awaiting reports`].filter(Boolean).join(' · ')
+  // Compact summary (number of exclusion reasons); quantities and reasons stay in the breakdown.
+  const kinds = parts.length + (agg.planUnreported > 0 ? 1 : 0)
   return (
     <div className={cx('flex flex-wrap items-start gap-x-4 gap-y-1 text-dense text-ink-muted', className)}>
       {has && (
         <details className="group min-w-0">
           <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-1.5 rounded py-0.5 [&::-webkit-details-marker]:hidden">
-            <span className="font-medium text-ink">Excluded from comparison:</span>
-            <span className="num">{summary}</span>
+            <span className="font-medium text-ink">Some data excluded</span>
+            <span aria-hidden>·</span>
+            <span className="num">
+              {kinds} {kinds === 1 ? 'reason' : 'reasons'}
+            </span>
             <span aria-hidden>·</span>
             <span className="font-medium text-accent-ink group-open:hidden">View breakdown</span>
             <span className="hidden font-medium text-accent-ink group-open:inline">Hide breakdown</span>

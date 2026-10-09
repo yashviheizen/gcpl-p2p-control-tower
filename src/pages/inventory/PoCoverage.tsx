@@ -1,6 +1,6 @@
-import { AlertOctagon, AlertTriangle, ArrowUp, CheckCircle2, ClipboardCheck, MinusCircle, type LucideIcon } from 'lucide-react'
+import { AlertOctagon, AlertTriangle, ArrowUp, CheckCircle2, ClipboardCheck, FlaskConical, MinusCircle, type LucideIcon } from 'lucide-react'
 import { Fragment, useMemo, useState } from 'react'
-import { AssumptionNote, Badge, Callout, Card, CellText, EmptyState, ExportButton, HelpTip, Kpi, LocalFilters, PageHeader, Segmented, TableWrap, cx, downloadCsv, td, tdNum, th, useOriginState, type Tone } from '@/components/ui'
+import { Badge, Callout, Card, CellText, Disclosure, EmptyState, ExportButton, HelpTip, Kpi, LocalFilters, PageHeader, Segmented, TableWrap, cx, downloadCsv, td, tdNum, th, useOriginState, type Tone } from '@/components/ui'
 import type { PlanGranularity, PoLine } from '@/data/types'
 import { eachDay, fmtDate, fmtMonth, monthEnd, monthOf } from '@/lib/dates'
 import { useFilters, usePageFilters } from '@/lib/filters'
@@ -164,9 +164,24 @@ export default function PoCoverage() {
         actions={<ExportButton onClick={exportCsv} disabled={!can('export.data') || !shown.length} />}
       />
       <div className="space-y-6">
-        <AssumptionNote>
-          Demo calculation: coverage = PO quantity ÷ active plan quantity for the month; formula pending GCPL confirmation. Covered = min(plan, PO qty); uncovered = plan − covered. PO lines count toward the month of their delivery date.
-        </AssumptionNote>
+        {/* "Provisional formula" stays visible; the formula itself sits behind a disclosure. */}
+        <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
+          <span className="inline-flex items-center gap-1.5 py-0.5 text-dense text-ink-muted">
+            <FlaskConical size={14} className="shrink-0 text-ink-subtle" aria-hidden />
+            <span className="font-medium text-ink">Provisional formula</span> · pending GCPL confirmation
+          </span>
+          <Disclosure summary="Calculation details" className="[&[open]]:basis-full">
+            <ul className="max-w-[760px] space-y-0.5 rounded-[var(--radius-card)] bg-surface-muted/70 px-3 py-2 text-dense text-ink-muted">
+              <li>
+                <span className="font-medium text-ink">Coverage</span> = PO quantity ÷ active plan quantity for the month (demo calculation).
+              </li>
+              <li>
+                <span className="font-medium text-ink">Covered</span> = min(plan, PO qty) per vendor–SKU; <span className="font-medium text-ink">uncovered</span> = plan − covered.
+              </li>
+              <li>PO lines count toward the month of their delivery date.</li>
+            </ul>
+          </Disclosure>
+        </div>
 
         {spansMonths && (
           <Callout tone="info" title={`Showing ${fmtMonth(month)} only`} details="PO coverage is evaluated per month. Change the period end date to view another month.">

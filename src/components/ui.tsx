@@ -224,16 +224,19 @@ export function Kpi({
 }) {
   const body = (
     <>
-      <div className="flex items-center justify-between gap-1">
-        <span className="flex min-w-0 items-center gap-0.5 text-dense font-medium whitespace-nowrap text-ink-muted">
-          {label}
+      {/* The period sits beside the label when both fit, and wraps onto its own muted line when they don't. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2">
+        <span className="flex min-w-0 items-center gap-0.5 text-dense font-medium text-ink-muted">
+          <span className="min-w-0">{label}</span>
           {help && (
-            <HelpTip label={`How ${label} is calculated`} align={helpAlign}>
-              {help}
-            </HelpTip>
+            <span className="-my-1 shrink-0">
+              <HelpTip label={`How ${label} is calculated`} align={helpAlign}>
+                {help}
+              </HelpTip>
+            </span>
           )}
         </span>
-        {period && <span className="shrink-0 text-label whitespace-nowrap text-ink-subtle">{period}</span>}
+        {period && <span className="text-label whitespace-nowrap text-ink-subtle">{period}</span>}
       </div>
       <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1">
         <span className="num text-kpi font-semibold whitespace-nowrap text-ink">{value}</span>

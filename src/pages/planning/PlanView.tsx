@@ -409,7 +409,8 @@ function PlanGrid({ ds, version, lines, unit }: { ds: Dataset; version: PlanVers
 
   return (
     <div>
-      <TableWrap maxHeight={520}>
+      {/* Scroll padding keeps a focused day cell clear of the pinned SKU and Month total columns. */}
+      <TableWrap maxHeight={520} className="scroll-pl-[230px] scroll-pr-[112px]">
         <table role="grid" aria-label={`Daily plan grid, ${version.label}. Use arrow keys to move between cells.`} aria-readonly="true" onKeyDown={onKey} className="border-separate border-spacing-0 text-dense">
           <thead>
             <tr>
@@ -427,7 +428,7 @@ function PlanGrid({ ds, version, lines, unit }: { ds: Dataset; version: PlanVers
                   <div className="text-label font-medium">{dayInfo[i].operating ? fmtDow(d) : 'Off'}</div>
                 </th>
               ))}
-              <th className={cx(th, 'sticky right-0 z-30 min-w-[92px] border-l border-line-strong text-right')} scope="col">
+              <th className={cx(th, 'sticky right-0 z-30 min-w-[112px] border-l-2 border-line-strong text-right shadow-[-6px_0_6px_-4px_rgba(0,0,0,0.18)]')} scope="col">
                 Month total
               </th>
             </tr>
@@ -469,7 +470,9 @@ function PlanGrid({ ds, version, lines, unit }: { ds: Dataset; version: PlanVers
                       </td>
                     )
                   })}
-                  <td className="num sticky right-0 z-20 border-b border-l border-line-strong bg-surface-muted px-2 py-1 text-right font-semibold whitespace-nowrap">{noMt ? 'n/a' : fmtQty(rowTotal(s), unit)}</td>
+                  <td className="num sticky right-0 z-20 min-w-[112px] border-b border-l-2 border-line-strong bg-surface-muted px-2.5 py-1 text-right font-semibold whitespace-nowrap shadow-[-6px_0_6px_-4px_rgba(0,0,0,0.18)]">
+                    {noMt ? 'n/a' : fmtQty(rowTotal(s), unit)}
+                  </td>
                 </tr>
               )
             })}
@@ -487,7 +490,9 @@ function PlanGrid({ ds, version, lines, unit }: { ds: Dataset; version: PlanVers
                   </td>
                 )
               })}
-              <td className="num sticky right-0 bottom-0 z-30 border-t border-l border-line-strong bg-accent-soft px-2 py-1.5 text-right font-semibold whitespace-nowrap">{fmtQty(grand, unit)}</td>
+              <td className="num sticky right-0 bottom-0 z-30 border-t border-l-2 border-line-strong bg-accent-soft px-2.5 py-1.5 text-right font-semibold whitespace-nowrap shadow-[-6px_0_6px_-4px_rgba(0,0,0,0.18)]">
+                {fmtQty(grand, unit)}
+              </td>
             </tr>
           </tfoot>
         </table>

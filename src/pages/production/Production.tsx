@@ -1,5 +1,5 @@
-import { AlertTriangle, ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, Grid3x3, Rows3, SearchCode, SearchX } from 'lucide-react'
-import { startTransition, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { AlertTriangle, ArrowLeft, ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown, Grid3x3, Rows3, SearchCode, SearchX, SlidersHorizontal } from 'lucide-react'
+import { startTransition, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { CELL_META, CellStatusBadge, LegendSwatch, NotComparedLine, StatusLegend } from '@/components/status'
 import {
@@ -22,6 +22,7 @@ import {
   tdNum,
   th,
   useDensity,
+  useDismiss,
   useOriginState,
   type OriginState,
 } from '@/components/ui'
@@ -39,7 +40,8 @@ import { buildColumns, buildTree, dayRangeLabel, DRILL_LEVELS, LEVEL_LABEL, type
 type View = 'heatmap' | 'table'
 type Grain = 'day' | 'week'
 type Metric = 'plan' | 'actual' | 'att'
-const METRIC_LABEL: Record<Metric, string> = { plan: 'Comparable plan', actual: 'Comparable actual', att: 'Attainment' }
+// Short row labels; the comparable basis is explained once beside the grid title.
+const METRIC_LABEL: Record<Metric, string> = { plan: 'Plan', actual: 'Actual', att: 'Attainment' }
 
 // Primary values are always on the comparable basis (days with both a daily plan and a valid report):
 // attainment = comparable actual ÷ comparable plan, gap = comparable actual − comparable plan.
@@ -294,7 +296,7 @@ const rowBg = (r: TreeRow) => (r.depth === 0 ? VENDOR_BG : 'bg-surface')
 const groupTop = (r: TreeRow, i: number) => (i === 0 ? '' : r.depth === 0 ? 'border-t border-t-line-strong' : 'border-t border-t-line')
 
 /** Identifying cell: one line with guides, chevron, name and child count; row actions appear on hover/focus. */
-function EntityCell({ r, onToggle, onViewVendor, focused, origin, periodAtt }: { r: TreeRow; onToggle: () => void; onViewVendor: () => void; focused: boolean; origin: OriginState; periodAtt?: ReactNode }) {
+function EntityCell({ r, onToggle, onViewVendor, focused, origin }: { r: TreeRow; onToggle: () => void; onViewVendor: () => void; focused: boolean; origin: OriginState }) {
   const name = r.level === 'sku' ? shortSkuName(r.label) : r.label
   const count = childCountText(r)
   return (
@@ -302,7 +304,7 @@ function EntityCell({ r, onToggle, onViewVendor, focused, origin, periodAtt }: {
       {Array.from({ length: r.depth }, (_, i) => (
         <span key={i} aria-hidden className="absolute top-0 bottom-0 w-px bg-line" style={{ left: 18 + i * INDENT }} />
       ))}
-      <div className="relative flex items-center gap-0.5" style={{ paddingLeft: r.depth * INDENT }}>
+      <div className="group/ent relative flex items-center gap-0.5" style={{ paddingLeft: r.depth * INDENT }}>
         {r.expandable ? (
           <button
             type="button"
@@ -317,12 +319,22 @@ function EntityCell({ r, onToggle, onViewVendor, focused, origin, periodAtt }: {
           <span className="-ml-1 w-6 shrink-0" aria-hidden />
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-1.5">
+          <div className="relative flex items-baseline gap-1.5">
             <span className={cx('min-w-0 truncate leading-4', r.depth === 0 ? 'text-body font-semibold text-ink' : 'text-dense text-ink')} title={r.level === 'sku' ? `${r.label} · ${r.id}` : `${LEVEL_LABEL[r.level]}: ${r.label}`}>
               {name}
             </span>
+            {/* Full name while a row control has keyboard focus (hover uses the native title). */}
+            <span
+              aria-hidden
+              className={cx(
+                'pointer-events-none absolute top-1/2 left-0 z-30 hidden -translate-y-1/2 rounded bg-surface px-1 py-0.5 leading-4 whitespace-nowrap shadow-[var(--shadow-pop)] group-has-[:focus-visible]/ent:block',
+                r.depth === 0 ? '-ml-1 text-body font-semibold text-ink' : '-ml-1 text-dense text-ink',
+              )}
+            >
+              {name}
+            </span>
             {r.expandable && (
-              <span className="shrink-0 text-label whitespace-nowrap text-ink-subtle" title={count}>
+              <span className="shrink-0 text-label font-normal whitespace-nowrap text-ink-subtle" title={count}>
                 {r.childCount}
                 <span className="sr-only"> {CHILD_NOUN[r.childLevel!][r.childCount === 1 ? 0 : 1]}</span>
               </span>
@@ -336,7 +348,6 @@ function EntityCell({ r, onToggle, onViewVendor, focused, origin, periodAtt }: {
             </div>
           )}
         </div>
-        {periodAtt}
         {r.level === 'vendor' && !focused && (
           // Persistent subtle icon; the "View vendor" label slides out over the name end on hover / keyboard focus.
           <button
@@ -365,7 +376,7 @@ function EntityCell({ r, onToggle, onViewVendor, focused, origin, periodAtt }: {
   )
 }
 
-/** Compact period attainment beside the entity name (Table view with attainment rows hidden). */
+/** Period attainment for the Table view summary column. */
 function PeriodAttBadge({ g, onOpen, label }: { g: GridCell; onOpen: () => void; label: string }) {
   return (
     <button
@@ -373,7 +384,7 @@ function PeriodAttBadge({ g, onOpen, label }: { g: GridCell; onOpen: () => void;
       onClick={onOpen}
       title="Period attainment (comparable basis)"
       aria-label={`${label}, period attainment: ${g.agg.attainment != null ? fmtPct(g.agg.attainment) : 'N/A'}. Open details`}
-      className="num shrink-0 rounded px-1 text-dense hover:bg-accent-soft"
+      className="num -mx-1 rounded px-1 text-dense hover:bg-accent-soft"
     >
       <AttText g={g} />
     </button>
@@ -406,9 +417,47 @@ function useHScroll() {
   return [ref, s.left, s.right, by] as const
 }
 
-const ENTITY_W = 'w-[208px] min-w-[208px] max-w-[208px]'
-const METRIC_W = 'w-[118px] min-w-[118px]'
-const METRIC_LEFT = 'left-[208px]'
+const ENTITY_W = 'w-[232px] min-w-[232px] max-w-[232px]'
+const METRIC_W = 'w-[88px] min-w-[88px]'
+const METRIC_LEFT = 'left-[232px]'
+/** Table view: period attainment summary column, pinned right after the period total. */
+const ATT_PX = 92
+const ATT_W = 'w-[92px] min-w-[92px] max-w-[92px]'
+
+/** Secondary grid settings (density, attainment rows, expand/collapse) behind one accessible menu button. */
+function ViewOptions({ children }: { children: (close: () => void) => ReactNode }) {
+  const [open, setOpen] = useState(false)
+  const id = useId()
+  const btn = useRef<HTMLButtonElement>(null)
+  const close = useCallback(() => setOpen(false), [])
+  const ref = useDismiss<HTMLDivElement>(open, close)
+  useEffect(() => {
+    if (open) ref.current?.querySelector<HTMLElement>('[role=dialog] button:not(:disabled), [role=dialog] input')?.focus()
+  }, [open, ref])
+  return (
+    // Escape (handled by useDismiss) returns focus to the trigger; outside clicks leave focus where the user put it.
+    <div ref={ref} className="relative" onKeyDown={(e) => e.key === 'Escape' && btn.current?.focus()}>
+      <button
+        ref={btn}
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((o) => !o)}
+        className={cx('inline-flex h-7 items-center gap-1.5 rounded-[var(--radius-control)] border border-line-strong bg-surface px-2.5 text-dense font-medium text-ink hover:bg-surface-muted', open && 'bg-surface-muted')}
+      >
+        <SlidersHorizontal size={14} aria-hidden />
+        View options
+        <ChevronDown size={14} aria-hidden className={cx('text-ink-subtle transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div id={id} role="dialog" aria-label="View options" className="absolute top-8 right-0 z-40 w-[260px] rounded-md border border-line bg-surface p-3 text-dense shadow-[var(--shadow-pop)]">
+          {children(close)}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /** Width of an element (for offsets that follow content-sized sticky columns). */
 function useWidth<T extends HTMLElement>() {
@@ -661,7 +710,10 @@ export default function Production() {
   // Heatmap day columns 50px; table quantity columns ≥84px and grow for long values (whitespace-nowrap).
   const colW = view === 'heatmap' ? (grain === 'day' ? 'min-w-[48px] w-[48px]' : 'min-w-[88px]') : grain === 'day' ? 'min-w-[84px]' : 'min-w-[104px]'
   const totalW = view === 'table' ? 'min-w-[112px]' : 'min-w-[180px]'
-  const stickyR = 'sticky right-0 shadow-[inset_2px_0_0_var(--color-line-strong)]'
+  // Table view pins two summary columns on the right: period total, then attainment.
+  const stickyR = cx('sticky shadow-[inset_2px_0_0_var(--color-line-strong)]', view === 'table' ? 'right-[92px]' : 'right-0')
+  const attCol = cx('sticky right-0 border-l border-line', ATT_W)
+  const rightW = totalW_px + (view === 'table' ? ATT_PX : 0)
   const openRowTotal = (r: TreeRow) => openCell(r, null, r.total)
 
   return (
@@ -808,6 +860,21 @@ export default function Production() {
                   Hierarchy: {DRILL_LEVELS.map((l) => LEVEL_LABEL[l]).join(' → ')}. Use the chevron to expand a row in place – other rows, totals and KPIs stay as they are. “View vendor” opens a focused analysis by setting the global vendor
                   filter. {view === 'table' ? 'Click a value or the period attainment' : 'Click a cell'} for its source records. All values use the comparable basis that the KPIs use.
                 </HelpTip>
+                {view === 'table' && (
+                  <span className="ml-1 inline-flex items-center border-l border-line pl-2 text-dense font-normal text-ink-muted">
+                    Comparable basis
+                    <HelpTip label="About the comparable basis">
+                      <span className="block">
+                        <span className="font-medium">Plan</span> and <span className="font-medium">Actual</span> count only days that have both a daily plan and a valid production report – the same basis as the KPIs, so plan, actual and
+                        attainment always cover the same days.
+                      </span>
+                      <span className="mt-1.5 block text-ink-muted">
+                        Kept out and itemised in each cell's details: plan awaiting a missing report, plan not yet due, and actual from monthly-plan vendors, without a daily plan or on non-operating days. A dot marks a value with such
+                        exclusions. Missing reports are never treated as zero.
+                      </span>
+                    </HelpTip>
+                  </span>
+                )}
               </span>
             }
             actions={
@@ -835,23 +902,60 @@ export default function Production() {
                       { value: 'table', label: 'Table', icon: Rows3 },
                     ]}
                   />
-                  {view === 'table' && (
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 text-dense text-ink-muted">
-                      <input type="checkbox" role="switch" aria-checked={showAtt} checked={showAtt} onChange={(e) => setParam({ att: e.target.checked ? '1' : null })} className="h-3.5 w-3.5 accent-[var(--color-accent)]" />
-                      Attainment rows
-                    </label>
-                  )}
                 </ToolGroup>
-                <ToolGroup label="Row density" short="Density">
-                  <DensityControl />
-                </ToolGroup>
-                <ToolGroup label="Grid actions" short="Actions">
-                  <span className="inline-flex items-center" role="group" aria-label="Rows and dates">
+                <ToolGroup label="Grid options" short="Options">
+                  <span className="inline-flex items-center" role="group" aria-label="Scroll dates">
                     <IconButton icon={ChevronLeft} label="Scroll to earlier dates" title="Earlier dates" disabled={!canScrollLeft} onClick={() => scrollByX(-320)} />
                     <IconButton icon={ChevronRight} label="Scroll to later dates" title="Later dates" disabled={!canScrollRight} onClick={() => scrollByX(320)} />
-                    <IconButton icon={ChevronsUpDown} label="Expand all rows" title="Expand all" disabled={allExpanded} onClick={() => setParam({ open: tree.allKeys.join(',') })} />
-                    <IconButton icon={ChevronsDownUp} label="Collapse all rows" title="Collapse all" disabled={!anyExpanded} onClick={() => setParam({ open: null })} />
                   </span>
+                  <ViewOptions>
+                    {(close) => (
+                      <div className="space-y-3">
+                        <div>
+                          <div className="mb-1 text-label font-medium text-ink-muted">Row density</div>
+                          <DensityControl />
+                        </div>
+                        <div>
+                          <div className="mb-1 text-label font-medium text-ink-muted">Hierarchy rows</div>
+                          <div className="flex gap-1.5">
+                            <Button
+                              size="sm"
+                              icon={ChevronsUpDown}
+                              disabled={allExpanded}
+                              onClick={() => {
+                                setParam({ open: tree.allKeys.join(',') })
+                                close()
+                              }}
+                            >
+                              Expand all
+                            </Button>
+                            <Button
+                              size="sm"
+                              icon={ChevronsDownUp}
+                              disabled={!anyExpanded}
+                              onClick={() => {
+                                setParam({ open: null })
+                                close()
+                              }}
+                            >
+                              Collapse all
+                            </Button>
+                          </div>
+                        </div>
+                        {view === 'table' && (
+                          <label className="flex cursor-pointer items-start gap-2 text-dense text-ink">
+                            <input type="checkbox" role="switch" aria-checked={showAtt} checked={showAtt} onChange={(e) => setParam({ att: e.target.checked ? '1' : null })} className="mt-0.5 h-3.5 w-3.5 accent-[var(--color-accent)]" />
+                            <span>
+                              Daily attainment rows
+                              <span className="block text-label text-ink-subtle">Adds an attainment row under plan and actual</span>
+                            </span>
+                          </label>
+                        )}
+                      </div>
+                    )}
+                  </ViewOptions>
+                </ToolGroup>
+                <ToolGroup label="Export" short="Export">
                   <ExportButton onClick={exportCsv} disabled={!can('export.data') || !pairs.length} />
                 </ToolGroup>
               </div>
@@ -890,8 +994,8 @@ export default function Production() {
                         {(() => {
                           const help = (
                             <HelpTip label="About period totals" align="right">
-                              Period total on the comparable basis: plan and actual on days with both a daily plan and a valid report – the same scope as the KPIs. A dot marks quantities kept out of the comparison; open the cell for
-                              “Additional quantities”. Totals are computed from records, so expanded rows are never double-counted.
+                              Totals for the selected period on the comparable basis used by the KPIs. A dot marks quantities kept out of the comparison; open the cell for “Additional quantities”. Totals are computed from records, so
+                              expanded rows are never double-counted.
                             </HelpTip>
                           )
                           return view === 'table' ? (
@@ -905,6 +1009,7 @@ export default function Production() {
                           )
                         })()}
                       </th>
+                      {view === 'table' && <th className={cx(th, attCol, 'z-20 text-right')}>Attainment</th>}
                     </tr>
                   </thead>
                   {view === 'heatmap' ? (
@@ -935,14 +1040,7 @@ export default function Production() {
                             <tr key={metric}>
                               {mi === 0 && (
                                 <td rowSpan={metrics.length} data-key={r.key} data-depth={r.depth} className={cx('sticky left-0 z-[5] py-[var(--cell-py)] pr-1 pl-2.5 align-top', ENTITY_W, rowBg(r), top)}>
-                                  <EntityCell
-                                    r={r}
-                                    onToggle={() => toggle(r)}
-                                    onViewVendor={() => viewVendor(r.id)}
-                                    focused={!!focusedVendor}
-                                    origin={origin}
-                                    periodAtt={showAtt ? undefined : <PeriodAttBadge g={r.total} label={r.label} onOpen={() => openRowTotal(r)} />}
-                                  />
+                                  <EntityCell r={r} onToggle={() => toggle(r)} onViewVendor={() => viewVendor(r.id)} focused={!!focusedVendor} origin={origin} />
                                 </td>
                               )}
                               <th scope="row" className={cx('sticky z-[5] border-r border-line px-2.5 py-[var(--cell-py)] text-left text-label font-medium whitespace-nowrap text-ink-muted', METRIC_LEFT, METRIC_W, rowBg(r), top)}>
@@ -978,6 +1076,11 @@ export default function Production() {
                                   <MetricValue metric={metric} g={r.total} unit={unit} />
                                 </button>
                               </td>
+                              {mi === 0 && (
+                                <td rowSpan={metrics.length} className={cx(attCol, 'z-[5] px-2.5 py-[var(--cell-py)] text-right align-top whitespace-nowrap', rowBg(r), top)}>
+                                  <PeriodAttBadge g={r.total} label={r.label} onOpen={() => openRowTotal(r)} />
+                                </td>
+                              )}
                             </tr>
                           )
                         })}
@@ -1010,12 +1113,9 @@ export default function Production() {
                             <tr key={metric} className="bg-surface-muted">
                               {mi === 0 && (
                                 <td rowSpan={metrics.length} className={cx('sticky left-0 z-[5] bg-surface-muted py-[var(--cell-py)] pr-1 pl-2.5 align-top', ENTITY_W, top)}>
-                                  <div className="flex items-start justify-between gap-2">
-                                    <span className="text-body font-semibold">
-                                      {totalLabel} <span className="font-normal text-ink-muted">({tree.vendorCount})</span>
-                                    </span>
-                                    {!showAtt && <PeriodAttBadge g={tree.grand} label={totalLabel} onOpen={() => openCell(null, null, tree.grand)} />}
-                                  </div>
+                                  <span className="text-body font-semibold">
+                                    {totalLabel} <span className="font-normal text-ink-muted">({tree.vendorCount})</span>
+                                  </span>
                                 </td>
                               )}
                               <th scope="row" className={cx('sticky z-[5] border-r border-line bg-surface-muted px-2.5 py-[var(--cell-py)] text-left text-label font-medium whitespace-nowrap text-ink-muted', METRIC_LEFT, METRIC_W, top)}>
@@ -1047,6 +1147,11 @@ export default function Production() {
                                   <MetricValue metric={metric} g={tree.grand} unit={unit} />
                                 </button>
                               </td>
+                              {mi === 0 && (
+                                <td rowSpan={metrics.length} className={cx(attCol, 'z-[5] bg-surface-muted px-2.5 py-[var(--cell-py)] text-right align-top font-semibold whitespace-nowrap', top)}>
+                                  <PeriodAttBadge g={tree.grand} label={totalLabel} onOpen={() => openCell(null, null, tree.grand)} />
+                                </td>
+                              )}
                             </tr>
                           )
                         })}
@@ -1054,7 +1159,7 @@ export default function Production() {
                     ))}
                 </table>
               </div>
-              {canScrollRight && <div aria-hidden className={cx('pointer-events-none absolute top-0 bottom-0 w-6 bg-gradient-to-l from-black/[0.06] to-transparent', '')} style={{ right: totalW_px }} />}
+              {canScrollRight && <div aria-hidden className={cx('pointer-events-none absolute top-0 bottom-0 w-6 bg-gradient-to-l from-black/[0.06] to-transparent', '')} style={{ right: rightW }} />}
             </div>
             <div className="border-t border-line px-4 py-2">
               <div className="flex flex-wrap items-start gap-x-4 gap-y-1.5">
@@ -1062,20 +1167,21 @@ export default function Production() {
                   <StatusLegend statuses={COMMON_LEGEND} className="min-w-0 flex-1" />
                 ) : (
                   <ul aria-label="Table legend" className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1 text-label text-ink-muted">
-                    <li>
+                    <li className="inline-flex items-center gap-1.5">
                       <MissingChip /> no valid report
                     </li>
-                    <li>
-                      <span className="font-semibold text-bad">0</span> reported zero
+                    <li className="inline-flex items-center gap-1.5">
+                      <span className="num font-semibold text-bad">0</span> reported zero
                     </li>
-                    <li>
-                      <span className="text-info">Monthly plan</span> daily N/A
+                    <li className="inline-flex items-center gap-1.5">
+                      <span className="text-info">Monthly plan</span> no daily target
                     </li>
-                    <li>Not due · future</li>
-                    <li>Off · non-operating</li>
-                    <li className="inline-flex items-center">
-                      <span aria-hidden className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-info" />
-                      excludes some quantities
+                    <li className="inline-flex items-center gap-1.5">
+                      <span className="text-ink-subtle">Not due</span> future date
+                    </li>
+                    <li className="inline-flex items-center gap-1.5">
+                      <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-info" />
+                      some quantities excluded
                     </li>
                   </ul>
                 )}
@@ -1094,7 +1200,8 @@ export default function Production() {
                     </dl>
                     <div className="space-y-1.5 text-label text-ink-muted">
                       <p>
-                        <span className="font-medium text-ink">Comparable plan</span> – daily plan on days with a valid report. <span className="font-medium text-ink">Comparable actual</span> – reported production on those days.
+                        <span className="font-medium text-ink">Plan</span> (comparable) – daily plan on days with a valid report. <span className="font-medium text-ink">Actual</span> (comparable) – reported production on those days. “Off”
+                        marks a non-operating day; “Not compared” is actual with no daily target.
                       </p>
                       <p>
                         <span className="font-medium text-ink">Attainment</span> = comparable actual ÷ comparable plan × 100 (N/A when there is no comparable plan). <span className="font-medium text-ink">Gap</span> = comparable actual −
