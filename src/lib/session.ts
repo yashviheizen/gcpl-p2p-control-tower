@@ -3,7 +3,7 @@
 import { ROUTE_PERMS } from '@/app/nav'
 import { store } from './store'
 
-export const DEMO_CREDENTIALS = { username: 'planner@example.com', password: 'DemoP2P2026!' } as const
+export const DEMO_CREDENTIALS = { username: 'admin@example.com', password: 'DemoP2P2026!' } as const
 
 // A session cookie (no expiry) lasts until the browser is closed and is shared across tabs.
 const COOKIE = 'gcpl-p2p-demo-session'
@@ -25,9 +25,9 @@ export function checkDemoCredentials(username: string, password: string): boolea
   return username.trim().toLowerCase() === DEMO_CREDENTIALS.username && password === DEMO_CREDENTIALS.password
 }
 
-/** Starts the demo session as the Supply Planner persona (switchable afterwards under Demo controls). */
+/** Starts the demo session as the Admin persona (switchable afterwards under Demo controls). */
 export function signIn() {
-  store.set((s) => ({ ...s, persona: 'planner' }))
+  store.set((s) => ({ ...s, persona: 'admin' }))
   writeCookie('1')
 }
 

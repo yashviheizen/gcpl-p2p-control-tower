@@ -61,6 +61,7 @@ export default function Login() {
             <p className="mt-1 text-ink-muted">
               Public demo credentials are prefilled: <span className="font-medium text-ink">{DEMO_CREDENTIALS.username}</span> / <span className="num font-medium text-ink">{DEMO_CREDENTIALS.password}</span>
             </p>
+            <p className="mt-1 text-ink-muted">Opens as the Admin persona. Switch permission views under Demo controls.</p>
           </div>
 
           <form onSubmit={submit} noValidate className="mt-6 flex flex-col gap-4">
