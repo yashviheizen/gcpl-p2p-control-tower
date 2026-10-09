@@ -6,7 +6,7 @@ import { NAV } from '@/app/nav'
 import { Link, useLocation } from 'react-router-dom'
 import type { Dataset } from '@/data/dataset'
 import type { ExceptionItem } from '@/data/types'
-import { DEMO_TODAY, LATEST_DUE_DATE, diffDays, fmtDate, fmtRange } from '@/lib/dates'
+import { DEMO_TODAY, LATEST_DUE_DATE, diffDays, fmtDate, fmtMonthToDate, fmtRange, monthOf } from '@/lib/dates'
 import { useFilters } from '@/lib/filters'
 import { fmtPct, fmtQty, fmtSigned, shortSkuName } from '@/lib/format'
 import { filterLink } from '@/lib/links'
@@ -127,7 +127,7 @@ function answer(intent: Intent, question: string, ds: Dataset, ex: ExceptionItem
       const other = rows.filter((r) => !(r.s === 'below' || r.s === 'zero'))
       return {
         ...base,
-        period: `MTD ${fmtRange(from, to)}`,
+        period: `${fmtMonthToDate(monthOf(from))} · ${fmtRange(from, to)}`,
         body: (
           <>
             {below.length ? (

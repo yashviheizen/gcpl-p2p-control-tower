@@ -5,7 +5,7 @@ import { Bar, CartesianGrid, ComposedChart, Legend, ResponsiveContainer, Tooltip
 import { AssumptionNote, Badge, Callout, Card, CellText, EmptyState, ExportButton, Kpi, LocalFilters, PageHeader, Select, TableWrap, cx, downloadCsv, td, tdNum, th, useOriginState } from '@/components/ui'
 import { reportKey } from '@/data/dataset'
 import type { ISODate } from '@/data/types'
-import { addDays, DEMO_TODAY, diffDays, eachDay, fmtDate, fmtRange, LATEST_DUE_DATE, monthOf } from '@/lib/dates'
+import { addDays, DEMO_TODAY, diffDays, eachDay, fmtDate, fmtMonthToDate, fmtRange, LATEST_DUE_DATE, monthOf } from '@/lib/dates'
 import { usePageFilters, useFilters } from '@/lib/filters'
 import { fmtCompact, fmtPct, fmtQty } from '@/lib/format'
 import { convertOrNull, dispatchedEa, latestFgSnapshot, producedEa, scopePairs } from '@/lib/metrics'
@@ -48,6 +48,7 @@ export default function Dispatch() {
   const mtdFrom = `${monthOf(DEMO_TODAY)}-01`
   // Same calculation over the same window → one "Dispatched" card instead of two identical ones.
   const periodIsMtd = from === mtdFrom && toDue === LATEST_DUE_DATE
+  const mtdLabel = fmtMonthToDate(monthOf(DEMO_TODAY))
 
   const rows = useMemo<Row[]>(() => {
     return scopePairs(ds, f).map(({ vendor, sku }) => {
@@ -170,7 +171,7 @@ export default function Dispatch() {
         'SKU',
         `Produced (${unit}, selected period)`,
         `Dispatched (${unit}, selected period)`,
-        `Dispatched (${unit}, MTD)`,
+        `Dispatched (${unit}, ${mtdLabel})`,
         'Dispatch days',
         'Reported operating days',
         'Missing dispatch reports',
@@ -228,10 +229,10 @@ export default function Dispatch() {
               label="Dispatched"
               value={fmtQty(totals.disp, unit)}
               unit={unit}
-              period={periodIsMtd ? 'Period = MTD' : 'Selected period'}
+              period={periodIsMtd ? `Period = ${mtdLabel}` : 'Selected period'}
               help={
                 periodIsMtd
-                  ? `Sum of dispatch records (invoices) on dates with a valid dispatch report. The selected period (${fmtRange(from, toDue)}) equals month to date, so one figure covers both.`
+                  ? `Sum of dispatch records (invoices) on dates with a valid dispatch report. The selected period (${fmtRange(from, toDue)}) equals ${mtdLabel}, so one figure covers both.`
                   : 'Sum of dispatch records (invoices) on dates with a valid dispatch report.'
               }
               sub={totals.vendorsMissing.size ? <span className="text-warn">{totals.vendorsMissing.size} vendor(s) with missing dispatch reports</span> : 'All dispatch reports received'}
@@ -242,7 +243,7 @@ export default function Dispatch() {
               period="Selected period"
               help="Dispatched ÷ produced × 100 for the scope. Below 100% means stock is building at the vendor; above 100% means older stock is being cleared. Demo calculation."
             />
-            {!periodIsMtd && <Kpi label="Dispatched" value={fmtQty(totals.mtd, unit)} unit={unit} period="MTD" help={`Month to date (${fmtRange(mtdFrom, LATEST_DUE_DATE)}), independent of the selected period.`} />}
+            {!periodIsMtd && <Kpi label="Dispatched" value={fmtQty(totals.mtd, unit)} unit={unit} period={mtdLabel} help={`${mtdLabel} (${fmtRange(mtdFrom, LATEST_DUE_DATE)}), independent of the selected period.`} />}
             <Kpi
               label={`Stock beyond ${lag}-day lag`}
               value={fmtQty(totals.lag, unit)}
@@ -342,7 +343,7 @@ export default function Dispatch() {
                       </th>
                       {!periodIsMtd && (
                         <th className={cx(th, 'text-right')}>
-                          <HeadPeriod title={`Dispatched (${unit})`}>MTD</HeadPeriod>
+                          <HeadPeriod title={`Dispatched (${unit})`}>{mtdLabel}</HeadPeriod>
                         </th>
                       )}
                       <th className={th}>

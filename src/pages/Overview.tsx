@@ -8,7 +8,7 @@ import { CELL_META, CellStatusBadge, ExStatusBadge, FreshnessBadge, NotComparedL
 import { AssumptionNote, Button, Card, CellText, Details, EmptyState, HelpTip, Kpi, PageHeader, TableWrap, cx, td, tdNum, th, useOriginState } from '@/components/ui'
 import { titleWithoutVendor } from '@/lib/exceptions'
 import type { ExceptionItem, Severity } from '@/data/types'
-import { DEMO_TODAY, LATEST_DUE_DATE, eachDay, fmtDate, fmtMonth, fmtRange, monthOf } from '@/lib/dates'
+import { DEMO_TODAY, LATEST_DUE_DATE, eachDay, fmtDate, fmtMonthToDate, fmtRange, monthOf } from '@/lib/dates'
 import { useFilters, usePageFilters } from '@/lib/filters'
 import { fmtCompact, fmtPct, fmtQty, fmtSigned } from '@/lib/format'
 import { filterLink } from '@/lib/links'
@@ -263,7 +263,7 @@ export default function Overview() {
           actions={
             <div className="text-right text-dense leading-tight">
               <div className="flex items-center justify-end gap-0.5 text-ink-muted">
-                {fmtMonth(rr.month)} run-rate projection
+                {fmtMonthToDate(rr.month)} run-rate projection
                 <HelpTip label="How the projection is calculated" align="right">
                   Daily-plan vendors only: MTD actual + average daily actual ({fmtQty(rr.avgDaily, unit)}) × remaining operating days ({rr.remainingDays}). Required daily rate to close: {fmtQty(rr.requiredDaily, unit)} {unit}. A demo
                   calculation, not a forecast.
@@ -409,7 +409,7 @@ export default function Overview() {
           summary={
             <>
               Monthly-plan vendors · {notComparedVendors.join(', ')}
-              <span className="font-normal text-ink-muted">· month-to-date vs monthly plan ({fmtMonth(monthOf(DEMO_TODAY))})</span>
+              <span className="font-normal text-ink-muted">· {fmtMonthToDate(monthOf(DEMO_TODAY))} vs monthly plan · independent of the selected period</span>
             </>
           }
         >
@@ -419,7 +419,9 @@ export default function Overview() {
                 <tr>
                   <th className={th}>Vendor · SKU</th>
                   <th className={cx(th, 'text-right')}>Month plan ({unit})</th>
-                  <th className={cx(th, 'text-right')}>Actual MTD ({unit})</th>
+                  <th className={cx(th, 'text-right')}>
+                    Actual, {fmtMonthToDate(monthOf(DEMO_TODAY))} ({unit})
+                  </th>
                   <th className={cx(th, 'text-right')}>% of month plan</th>
                   <th className={cx(th, 'text-right')}>Operating days elapsed</th>
                 </tr>

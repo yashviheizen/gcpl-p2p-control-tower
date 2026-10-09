@@ -67,6 +67,11 @@ export function fmtMonth(month: string): string {
   const [y, m] = month.split('-').map(Number)
   return `${MONTHS[m - 1]} ${y}`
 }
+/** Month-to-date label tied to the report cutoff, e.g. "Oct 2026 MTD"; earlier months are complete. */
+export function fmtMonthToDate(month: string): string {
+  const current = monthOf(LATEST_DUE_DATE)
+  return month === current ? `${fmtMonth(month)} MTD` : month < current ? `${fmtMonth(month)} (full month)` : `${fmtMonth(month)} (not started)`
+}
 export function fmtDateTime(iso: string): string {
   const d = iso.slice(0, 10)
   const t = iso.slice(11, 16)

@@ -8,7 +8,8 @@ import { useDataset } from '@/lib/store'
 import { Segmented, cx } from './ui'
 
 const PRESETS: { label: string; from: string; to: string }[] = [
-  { label: 'Month to date (Oct)', from: '2026-10-01', to: DEMO_TODAY },
+  { label: '27 Sep – 9 Oct (default)', from: DEFAULT_FILTERS.dateFrom, to: DEFAULT_FILTERS.dateTo },
+  { label: 'Oct 2026 month to date', from: '2026-10-01', to: DEMO_TODAY },
   { label: 'Last 7 days', from: '2026-10-02', to: LATEST_DUE_DATE },
   { label: 'October 2026 (full month)', from: '2026-10-01', to: '2026-10-31' },
   { label: 'September 2026', from: '2026-09-01', to: '2026-09-30' },
@@ -235,7 +236,7 @@ export function FilterBar() {
                 />
               </label>
             </div>
-            <p className="px-1 pt-1 text-label text-ink-subtle">Demo data covers 1 Sep – 8 Oct 2026 actuals; plans run to 31 Oct.</p>
+            <p className="px-1 pt-1 text-label text-ink-subtle">Demo data covers 1 Sep – 8 Oct 2026 actuals (reports for 9 Oct are not due yet); plans run to 31 Oct.</p>
           </div>
         </Popover>
 

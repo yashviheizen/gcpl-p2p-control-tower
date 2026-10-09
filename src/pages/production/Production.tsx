@@ -28,7 +28,7 @@ import {
 } from '@/components/ui'
 import type { Dataset } from '@/data/dataset'
 import type { Unit } from '@/data/types'
-import { eachDay, fmtDate, fmtMonth, fmtRange, LATEST_DUE_DATE, monthOf } from '@/lib/dates'
+import { eachDay, fmtDate, fmtMonth, fmtMonthToDate, fmtRange, LATEST_DUE_DATE, monthOf } from '@/lib/dates'
 import { useFilters, usePageFilters } from '@/lib/filters'
 import { fmtNum, fmtPct, fmtQty, fmtSigned, shortSkuName } from '@/lib/format'
 import { cellsFor, coverageSummary, monthlyPlanRows, runRate, scopePairs, STATUS_ORDER, thresholds, type CellStatus } from '@/lib/metrics'
@@ -798,7 +798,7 @@ export default function Production() {
             <div className="col-span-2 grid lg:col-span-1">
               <Kpi
                 label="Run-rate"
-                period={`${fmtMonth(rr.month)} MTD`}
+                period={fmtMonthToDate(rr.month)}
                 value={fmtQty(rr.avgDaily, unit)}
                 unit={`${unit}/day`}
                 sub={rr.projectedAttainment == null ? 'Projection N/A' : `Projected ${fmtPct(rr.projectedAttainment)}`}
@@ -975,11 +975,12 @@ export default function Production() {
                     <tr>
                       <th className={cx(th, 'left-0 z-20', ENTITY_W, view === 'heatmap' && 'border-r')}>Vendor / hierarchy</th>
                       {view === 'table' && <th className={cx(th, METRIC_LEFT, 'z-20 border-r', METRIC_W)}>Metric</th>}
-                      {columns.map((c) => (
+                      {columns.map((c, i) => (
                         <th key={c.key} className={cx(th, colW, view === 'table' ? 'text-right' : 'px-0.5 text-center', isFuture(c) && 'text-ink-subtle')}>
                           {grain === 'day' ? (
                             <span className="text-label leading-4 whitespace-nowrap" title={`${c.sub} ${c.label}`}>
-                              <span className="font-normal text-ink-subtle">{c.sub}</span> <span className="font-medium">{view === 'heatmap' ? +c.key.slice(8) : c.label}</span>
+                              {/* Compact heatmap headers name the month on the first column and wherever a new month starts. */}
+                              <span className="font-normal text-ink-subtle">{c.sub}</span> <span className="font-medium">{view === 'heatmap' && i > 0 && c.key.slice(8) !== '01' ? +c.key.slice(8) : c.label}</span>
                             </span>
                           ) : (
                             <span className={cx('text-label leading-4 font-medium whitespace-nowrap', c.partial && 'text-warn')} title={c.sub}>
@@ -1246,7 +1247,7 @@ export default function Production() {
                       <th className={th}>Month</th>
                       <th className={cx(th, 'text-right')}>Month plan ({unit})</th>
                       <th className={cx(th, 'text-right')}>
-                        Actual MTD to {LATEST_DUE_DATE.slice(8)} Oct ({unit})
+                        Actual to {fmtDate(LATEST_DUE_DATE)} ({unit})
                       </th>
                       <th className={cx(th, 'text-right')}>% of month plan</th>
                       <th className={cx(th, 'text-right')}>Operating days elapsed</th>
@@ -1266,7 +1267,7 @@ export default function Production() {
                             </Link>{' '}
                             <span className="text-dense text-ink-muted">{sku.code}</span>
                           </td>
-                          <td className={td}>{fmtMonth(m.month)}</td>
+                          <td className={td}>{fmtMonthToDate(m.month)}</td>
                           <td className={tdNum}>{fmtQty(plan, unit)}</td>
                           <td className={tdNum}>{fmtQty(act, unit)}</td>
                           <td className={tdNum}>{fmtPct(m.monthPlanEa ? (m.mtdActualEa / m.monthPlanEa) * 100 : null, 1)}</td>

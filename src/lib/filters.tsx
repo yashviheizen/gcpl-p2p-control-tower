@@ -7,8 +7,12 @@ import type { AnalysisFilters, HierarchySel } from './metrics'
 import { useDataset } from './store'
 
 const KEY = 'gcpl-p2p-filters-v1'
+// Bumped when the default period changes, so saved sessions still on the old default move to the new one.
+const DEFAULTS_KEY = 'gcpl-p2p-filter-defaults'
+const DEFAULTS_VERSION = '2'
+const PREVIOUS_DEFAULT = { dateFrom: '2026-10-01', dateTo: DEMO_TODAY }
 export const DEFAULT_FILTERS: AnalysisFilters = {
-  dateFrom: '2026-10-01',
+  dateFrom: '2026-09-27',
   dateTo: DEMO_TODAY,
   vendorIds: [],
   hierarchy: null,
@@ -32,7 +36,12 @@ const Ctx = createContext<FilterCtx | null>(null)
 function load(): AnalysisFilters {
   try {
     const raw = localStorage.getItem(KEY)
-    return raw ? { ...DEFAULT_FILTERS, ...JSON.parse(raw) } : DEFAULT_FILTERS
+    const saved: AnalysisFilters = raw ? { ...DEFAULT_FILTERS, ...JSON.parse(raw) } : DEFAULT_FILTERS
+    if (localStorage.getItem(DEFAULTS_KEY) === DEFAULTS_VERSION) return saved
+    localStorage.setItem(DEFAULTS_KEY, DEFAULTS_VERSION)
+    // Only the untouched old default period is replaced; custom ranges and other settings are kept.
+    const onOldDefault = saved.dateFrom === PREVIOUS_DEFAULT.dateFrom && saved.dateTo === PREVIOUS_DEFAULT.dateTo
+    return onOldDefault ? { ...saved, dateFrom: DEFAULT_FILTERS.dateFrom, dateTo: DEFAULT_FILTERS.dateTo } : saved
   } catch {
     return DEFAULT_FILTERS
   }

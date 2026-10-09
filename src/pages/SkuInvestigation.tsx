@@ -5,7 +5,7 @@ import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, T
 import { legendText } from '@/pages/inventory/shared'
 import { CellStatusBadge, ExStatusBadge, SeverityBadge, StatusLegend } from '@/components/status'
 import { AssumptionNote, Badge, Card, EmptyState, Kpi, LocalFilters, PageHeader, Select, TableWrap, cx, td, tdNum, th, type OriginState } from '@/components/ui'
-import { diffDays, eachDay, fmtDate, fmtDateDow, fmtDateTime, fmtRange, LATEST_DUE_DATE, monthOf } from '@/lib/dates'
+import { diffDays, eachDay, fmtDate, fmtDateDow, fmtDateTime, fmtMonthToDate, fmtRange, LATEST_DUE_DATE, monthOf } from '@/lib/dates'
 import { usePageFilters, useFilters } from '@/lib/filters'
 import { fmtCompact, fmtNum, fmtPct, fmtQty, fmtSigned } from '@/lib/format'
 import { aggregateCells, cellsFor, dispatchedEa, fgBaseline, latestFgSnapshot, monthlyPlanRows, STATUS_ORDER, thresholds, type ScopePair } from '@/lib/metrics'
@@ -224,12 +224,12 @@ export default function SkuInvestigation() {
       </div>
 
       {monthly.length > 0 && (
-        <Card className="mb-6" title="Monthly plan" subtitle="Monthly plans are compared month-to-date. They are not split by day.">
+        <Card className="mb-6" title="Monthly plan" subtitle={`Monthly plans are compared month-to-date (actuals to ${fmtDate(LATEST_DUE_DATE)}). They are not split by day.`}>
           <ul className="space-y-1 text-body">
             {monthly.map((m) => (
               <li key={m.vendorId + m.month}>
-                {ds.idx.vendor.get(m.vendorId)!.name} · {m.month}: plan <span className="num font-medium">{fmtQty(cv(m.monthPlanEa), unit)}</span> {unit}, actual MTD <span className="num font-medium">{fmtQty(cv(m.mtdActualEa), unit)}</span>{' '}
-                ({fmtPct((m.mtdActualEa / m.monthPlanEa) * 100, 1)})
+                {ds.idx.vendor.get(m.vendorId)!.name} · {fmtMonthToDate(m.month)}: plan <span className="num font-medium">{fmtQty(cv(m.monthPlanEa), unit)}</span> {unit}, actual{' '}
+                <span className="num font-medium">{fmtQty(cv(m.mtdActualEa), unit)}</span> ({fmtPct((m.mtdActualEa / m.monthPlanEa) * 100, 1)})
               </li>
             ))}
           </ul>
