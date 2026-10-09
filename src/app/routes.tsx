@@ -23,35 +23,39 @@ const ReportUpload = lazy(() => import('@/pages/data/ReportUpload'))
 const MasterData = lazy(() => import('@/pages/setup/MasterData'))
 const Admin = lazy(() => import('@/pages/setup/Admin'))
 
-export const router = createBrowserRouter([
-  {
-    element: <Providers />,
-    children: [
-      {
-        element: <AppShell />,
-        children: [
-          { path: '/', element: <Overview /> },
-          { path: '/production', element: <Production /> },
-          { path: '/sku/:code', element: <SkuInvestigation /> },
-          { path: '/dispatch', element: <Dispatch /> },
-          { path: '/fg-inventory', element: <FgInventory /> },
-          { path: '/materials', element: <Materials /> },
-          { path: '/po-coverage', element: <PoCoverage /> },
-          { path: '/planning', element: <PlanView /> },
-          { path: '/planning/upload', element: <PlanUpload /> },
-          { path: '/planning/compare', element: <PlanCompare /> },
-          { path: '/exceptions', element: <ExceptionsList /> },
-          { path: '/exceptions/:id', element: <ExceptionDetail /> },
-          { path: '/data/reports', element: <Reports /> },
-          { path: '/data/quality', element: <DataQuality /> },
-          { path: '/data/uploads', element: <UploadHistory /> },
-          { path: '/data/uploads/:id', element: <BatchDetail /> },
-          { path: '/data/upload/new', element: <ReportUpload /> },
-          { path: '/master-data', element: <MasterData /> },
-          { path: '/admin', element: <Admin /> },
-          { path: '*', element: <Navigate to="/" replace /> },
-        ],
-      },
-    ],
-  },
-])
+export const router = createBrowserRouter(
+  [
+    {
+      element: <Providers />,
+      children: [
+        {
+          element: <AppShell />,
+          children: [
+            { path: '/', element: <Overview /> },
+            { path: '/production', element: <Production /> },
+            { path: '/sku/:code', element: <SkuInvestigation /> },
+            { path: '/dispatch', element: <Dispatch /> },
+            { path: '/fg-inventory', element: <FgInventory /> },
+            { path: '/materials', element: <Materials /> },
+            { path: '/po-coverage', element: <PoCoverage /> },
+            { path: '/planning', element: <PlanView /> },
+            { path: '/planning/upload', element: <PlanUpload /> },
+            { path: '/planning/compare', element: <PlanCompare /> },
+            { path: '/exceptions', element: <ExceptionsList /> },
+            { path: '/exceptions/:id', element: <ExceptionDetail /> },
+            { path: '/data/reports', element: <Reports /> },
+            { path: '/data/quality', element: <DataQuality /> },
+            { path: '/data/uploads', element: <UploadHistory /> },
+            { path: '/data/uploads/:id', element: <BatchDetail /> },
+            { path: '/data/upload/new', element: <ReportUpload /> },
+            { path: '/master-data', element: <MasterData /> },
+            { path: '/admin', element: <Admin /> },
+            { path: '*', element: <Navigate to="/" replace /> },
+          ],
+        },
+      ],
+    },
+  ],
+  // Served from a sub-path on GitHub Pages (VITE_BASE); '/' elsewhere.
+  { basename: import.meta.env.BASE_URL.replace(/\/$/, '') || '/' },
+)

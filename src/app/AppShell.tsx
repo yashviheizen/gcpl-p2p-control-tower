@@ -242,7 +242,7 @@ function TopBar() {
               onClick={() => {
                 store.reset()
                 localStorage.removeItem('gcpl-p2p-filters-v1')
-                location.assign('/')
+                location.assign(import.meta.env.BASE_URL)
               }}
             >
               Reset local demo state
