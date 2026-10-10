@@ -5,7 +5,7 @@ import { Badge, Button, Callout, Card, EmptyState, LocalFilters, Modal, PageHead
 import { fmtDateTime } from '@/lib/dates'
 import { usePageFilters } from '@/lib/filters'
 import { ALL_PERMISSIONS, DEFAULT_GROUPS, PERSONAS, demoNow, logActivity, store, useAppState, useDataset, usePermissions } from '@/lib/store'
-import { ActivityRows, Check, EMAIL_RE, Field, SearchBox, hasErrors, inputCls, required, usePaged, type Errors } from './shared'
+import { ActivityRows, Check, ConfirmDialog, EMAIL_RE, Field, SearchBox, hasErrors, inputCls, required, usePaged, type Errors } from './shared'
 
 type Tab = 'users' | 'groups' | 'audit'
 const PERM_GROUPS = [...new Set(ALL_PERMISSIONS.map((p) => p.group))]
@@ -74,6 +74,8 @@ function UsersTab({ canManage }: { canManage: boolean }) {
   const groups = useAppState((s) => s.groups)
   const ds = useDataset()
   const [invite, setInvite] = useState(false)
+  const [editing, setEditing] = useState<DemoUser | null>(null)
+  const [disabling, setDisabling] = useState<DemoUser | null>(null)
   const [q, setQ] = useState('')
   const rows = users.filter((u) => !q || `${u.name} ${u.email}`.toLowerCase().includes(q.toLowerCase()))
   const gName = (id: string) => groups.find((g) => g.id === id)?.name ?? id
@@ -95,7 +97,7 @@ function UsersTab({ canManage }: { canManage: boolean }) {
         }
       >
         {rows.length === 0 ? (
-          <EmptyState title="No users match" />
+          <EmptyState title="No users match">Clear the search to see all users.</EmptyState>
         ) : (
           <TableWrap>
             <table className="w-full border-separate border-spacing-0">
@@ -119,28 +121,7 @@ function UsersTab({ canManage }: { canManage: boolean }) {
                       <div className="font-medium">{u.name}</div>
                       <div className="text-dense text-ink-muted">{u.email}</div>
                     </td>
-                    <td className={td}>
-                      {canManage ? (
-                        <Select
-                          label={`Permission group for ${u.name}`}
-                          hideLabel
-                          value={u.groupId}
-                          onChange={(e) => {
-                            const g = e.target.value
-                            setUsers((list) => list.map((x) => (x.id === u.id ? { ...x, groupId: g } : x)))
-                            logActivity('Administration', 'Changed user group', u.email, `${gName(u.groupId)} → ${gName(g)}`)
-                          }}
-                        >
-                          {groups.map((g) => (
-                            <option key={g.id} value={g.id}>
-                              {g.name}
-                            </option>
-                          ))}
-                        </Select>
-                      ) : (
-                        gName(u.groupId)
-                      )}
-                    </td>
+                    <td className={td}>{gName(u.groupId)}</td>
                     <td className={cx(td, 'text-ink-muted')}>{u.vendorScope.length ? u.vendorScope.map((v) => ds.idx.vendor.get(v)?.name ?? v).join(', ') : 'All vendors'}</td>
                     <td className={td}>
                       {u.status === 'Active' && (
@@ -156,32 +137,30 @@ function UsersTab({ canManage }: { canManage: boolean }) {
                       )}
                       {u.status === 'Disabled' && (
                         <Badge tone="none" icon={UserX}>
-                          Deactivated
+                          {u.invitedAt ? 'Invite revoked' : 'Deactivated'}
                         </Badge>
                       )}
                     </td>
                     {canManage && (
                       <td className={cx(td, 'whitespace-nowrap')}>
+                        <Button size="sm" variant="ghost" icon={Pencil} onClick={() => setEditing(u)} aria-label={`Edit access for ${u.name}`}>
+                          Edit access
+                        </Button>
                         {u.status === 'Disabled' ? (
                           <Button
                             size="sm"
                             variant="ghost"
                             onClick={() => {
-                              setUsers((l) => l.map((x) => (x.id === u.id ? { ...x, status: 'Active' } : x)))
-                              logActivity('Administration', 'Reactivated user', u.email)
+                              // A revoked invitation (never accepted) returns to Invited, not Active.
+                              const restored = u.invitedAt ? 'Invited' : 'Active'
+                              setUsers((l) => l.map((x) => (x.id === u.id ? { ...x, status: restored } : x)))
+                              logActivity('Administration', u.invitedAt ? 'Restored invitation (local demo – no email sent)' : 'Reactivated user', u.email)
                             }}
                           >
-                            Reactivate
+                            {u.invitedAt ? 'Restore invite' : 'Reactivate'}
                           </Button>
                         ) : (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setUsers((l) => l.map((x) => (x.id === u.id ? { ...x, status: 'Disabled' } : x)))
-                              logActivity('Administration', u.status === 'Invited' ? 'Revoked invitation' : 'Deactivated user', u.email)
-                            }}
-                          >
+                          <Button size="sm" variant="ghost" onClick={() => setDisabling(u)}>
                             {u.status === 'Invited' ? 'Revoke invite' : 'Deactivate'}
                           </Button>
                         )}
@@ -195,6 +174,31 @@ function UsersTab({ canManage }: { canManage: boolean }) {
         )}
       </Card>
       {invite && <InviteModal onClose={() => setInvite(false)} />}
+      {editing && <AccessModal user={editing} onClose={() => setEditing(null)} />}
+      {disabling && (
+        <ConfirmDialog
+          title={disabling.status === 'Invited' ? 'Revoke invitation?' : 'Deactivate user?'}
+          confirmLabel={disabling.status === 'Invited' ? 'Revoke invite' : 'Deactivate'}
+          onClose={() => setDisabling(null)}
+          onConfirm={() => {
+            const u = disabling
+            setUsers((l) => l.map((x) => (x.id === u.id ? { ...x, status: 'Disabled' } : x)))
+            logActivity('Administration', u.status === 'Invited' ? 'Revoked invitation' : 'Deactivated user', u.email)
+          }}
+        >
+          <p>
+            {disabling.status === 'Invited' ? (
+              <>
+                The pending invitation for <span className="font-medium">{disabling.name}</span> ({disabling.email}) will be marked as revoked. You can restore it later.
+              </>
+            ) : (
+              <>
+                <span className="font-medium">{disabling.name}</span> ({disabling.email}) will be marked as deactivated. You can reactivate them later.
+              </>
+            )}
+          </p>
+        </ConfirmDialog>
+      )}
     </div>
   )
 }
@@ -202,7 +206,6 @@ function UsersTab({ canManage }: { canManage: boolean }) {
 function InviteModal({ onClose }: { onClose: () => void }) {
   const users = useAppState((s) => s.users)
   const groups = useAppState((s) => s.groups)
-  const ds = useDataset()
   const [f, setF] = useState({
     name: '',
     email: '',
@@ -270,27 +273,84 @@ function InviteModal({ onClose }: { onClose: () => void }) {
             ))}
           </select>
         </Field>
-        <fieldset className="col-span-2">
-          <legend className="mb-1 text-dense font-medium text-ink-muted">Vendor scope (none selected = all vendors)</legend>
-          <div className="flex flex-wrap gap-3">
-            {ds.vendors.map((v) => (
-              <Check
-                key={v.id}
-                label={v.name}
-                checked={f.vendorScope.includes(v.id)}
-                onChange={(on) =>
-                  setF({
-                    ...f,
-                    vendorScope: on ? [...f.vendorScope, v.id] : f.vendorScope.filter((x) => x !== v.id),
-                  })
-                }
-              />
-            ))}
-          </div>
-        </fieldset>
+        <VendorScopeField value={f.vendorScope} onChange={(vendorScope) => setF({ ...f, vendorScope })} />
         <div className="col-span-2">
           <Callout tone="info">No email is sent — this is a local demo invitation. The user appears as “Invited” in this browser only.</Callout>
         </div>
+      </form>
+    </Modal>
+  )
+}
+
+function VendorScopeField({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const ds = useDataset()
+  return (
+    <fieldset className="col-span-2">
+      <legend className="mb-1 text-dense font-medium text-ink-muted">Vendor scope (none selected = all vendors)</legend>
+      <div className="flex flex-wrap gap-3">
+        {ds.vendors.map((v) => (
+          <Check key={v.id} label={v.name} checked={value.includes(v.id)} onChange={(on) => onChange(on ? [...value, v.id] : value.filter((x) => x !== v.id))} />
+        ))}
+      </div>
+      <p className="mt-1 text-label text-ink-subtle">Recorded for the demo only – the prototype does not yet filter data by vendor scope.</p>
+    </fieldset>
+  )
+}
+
+/** Change a user's permission group and vendor scope. */
+function AccessModal({ user, onClose }: { user: DemoUser; onClose: () => void }) {
+  const groups = useAppState((s) => s.groups)
+  const ds = useDataset()
+  const [f, setF] = useState({ groupId: user.groupId, vendorScope: user.vendorScope })
+  const gName = (id: string) => groups.find((g) => g.id === id)?.name ?? id
+  const scopeLabel = (ids: string[]) => (ids.length ? ids.map((v) => ds.idx.vendor.get(v)?.name ?? v).join(', ') : 'All vendors')
+  const submit = () => {
+    const changes: string[] = []
+    if (f.groupId !== user.groupId) changes.push(`Group: ${gName(user.groupId)} → ${gName(f.groupId)}`)
+    const sameScope = f.vendorScope.length === user.vendorScope.length && f.vendorScope.every((v) => user.vendorScope.includes(v))
+    if (!sameScope) changes.push(`Vendor scope: ${scopeLabel(user.vendorScope)} → ${scopeLabel(f.vendorScope)}`)
+    if (changes.length) {
+      setUsers((l) => l.map((x) => (x.id === user.id ? { ...x, groupId: f.groupId, vendorScope: f.vendorScope } : x)))
+      logActivity('Administration', 'Changed user access', user.email, changes.join('; '))
+    }
+    onClose()
+  }
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Edit access – ${user.name}`}
+      width={520}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" type="submit" form="access-form">
+            Save access
+          </Button>
+        </>
+      }
+    >
+      <form
+        id="access-form"
+        noValidate
+        className="grid grid-cols-2 gap-3"
+        onSubmit={(e) => {
+          e.preventDefault()
+          submit()
+        }}
+      >
+        <p className="col-span-2 text-dense text-ink-muted">{user.email}</p>
+        <Field label="Permission group" className="col-span-2" hint={groups.find((g) => g.id === f.groupId)?.description}>
+          <select className={inputCls} value={f.groupId} onChange={(e) => setF({ ...f, groupId: e.target.value })}>
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <VendorScopeField value={f.vendorScope} onChange={(vendorScope) => setF({ ...f, vendorScope })} />
+        <p className="col-span-2 text-label text-ink-subtle">Saved only in this browser. Demo users are not linked to the persona switcher, so this does not change what you can see.</p>
       </form>
     </Modal>
   )
@@ -309,6 +369,7 @@ function GroupsTab({ canManage }: { canManage: boolean }) {
   const [selId, setSelId] = useState(groups[0]?.id)
   const [creating, setCreating] = useState(false)
   const [renaming, setRenaming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const sel = groups.find((g) => g.id === selId) ?? groups[0]
   const activeGroupId = personaGroup[persona]
   const builtinDefault = DEFAULT_GROUPS.find((d) => d.id === sel.id)
@@ -435,18 +496,7 @@ function GroupsTab({ canManage }: { canManage: boolean }) {
                   </Button>
                 )}
                 {!sel.builtIn && (
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    icon={Trash2}
-                    disabled={inUse}
-                    title={inUse ? 'Group is assigned to users or personas' : undefined}
-                    onClick={() => {
-                      setGroups((gs) => gs.filter((g) => g.id !== sel.id))
-                      logActivity('Administration', 'Deleted permission group', sel.name)
-                      setSelId(groups[0].id)
-                    }}
-                  >
+                  <Button size="sm" variant="danger" icon={Trash2} disabled={inUse} title={inUse ? 'Group is assigned to users or personas' : undefined} onClick={() => setDeleting(true)}>
                     Delete
                   </Button>
                 )}
@@ -491,6 +541,22 @@ function GroupsTab({ canManage }: { canManage: boolean }) {
         />
       )}
       {renaming && <RenameGroupModal group={sel} onClose={() => setRenaming(false)} />}
+      {deleting && (
+        <ConfirmDialog
+          title="Delete permission group?"
+          confirmLabel="Delete group"
+          onClose={() => setDeleting(false)}
+          onConfirm={() => {
+            setGroups((gs) => gs.filter((g) => g.id !== sel.id))
+            logActivity('Administration', 'Deleted permission group', sel.name)
+            setSelId(groups[0].id)
+          }}
+        >
+          <p>
+            <span className="font-medium">{sel.name}</span> and its {sel.permissions.length} permission(s) will be removed. No users or personas use it.
+          </p>
+        </ConfirmDialog>
+      )}
     </div>
   )
 }

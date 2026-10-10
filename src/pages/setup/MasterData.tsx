@@ -1,5 +1,6 @@
 import { FlaskConical, Lock, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import type { CodeMapping, OperatingCalendar, Parameter, Sku, Vendor } from '@/data/types'
 import type { Dataset } from '@/data/dataset'
 import { AssumptionNote, Badge, Button, Callout, Card, EmptyState, IconButton, LocalFilters, PageHeader, Pager, Select, TableWrap, Tabs, cx, td, tdNum, th } from '@/components/ui'
@@ -7,11 +8,11 @@ import { fmtDate, fmtDow } from '@/lib/dates'
 import { usePageFilters } from '@/lib/filters'
 import { fmtNum } from '@/lib/format'
 import { useAppState, useDataset, usePermissions } from '@/lib/store'
+import { MASTER_SECTIONS, masterPath, type MasterSection } from '@/app/nav'
 import { HierarchyTab } from './HierarchyTab'
 import { CalExceptionModal, CalendarModal, CodeMappingModal, ParamModal, RelationModal, SkuModal, VendorModal } from './MasterForms'
-import { ActivityRows, SearchBox, saveMaster, usePaged } from './shared'
+import { ActivityRows, SearchBox, saveMaster, useConfirm, usePaged } from './shared'
 
-type Tab = 'hierarchy' | 'vendors' | 'uom' | 'calendars' | 'calex' | 'codes' | 'params' | 'history'
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export default function MasterData() {
@@ -20,7 +21,20 @@ export default function MasterData() {
   const { can } = usePermissions()
   const canEdit = can('masterData.edit')
   const history = useAppState((s) => s.activity).filter((a) => a.area === 'Master data')
-  const [tab, setTab] = useState<Tab>('hierarchy')
+  // The section lives in the URL (/master-data/<slug>) so sidebar links, tabs, refresh and Back/Forward agree.
+  const navigate = useNavigate()
+  const { section } = useParams()
+  const tab = MASTER_SECTIONS.find((m) => m.slug === section)?.slug
+  if (!tab) return <Navigate to={masterPath(MASTER_SECTIONS[0].slug)} replace />
+  const counts: Partial<Record<MasterSection, number>> = {
+    'product-hierarchy': ds.skus.length,
+    vendors: ds.vendors.length,
+    'operating-calendars': ds.calendars.length,
+    'calendar-exceptions': ds.calendarExceptions.length,
+    'code-mappings': ds.codeMappings.length,
+    parameters: ds.parameters.length,
+    'change-history': history.length,
+  }
 
   return (
     <div>
@@ -43,54 +57,16 @@ export default function MasterData() {
         </Callout>
       </div>
       <div className="scroll-thin mb-3 overflow-x-auto">
-        <Tabs
-          label="Master data sections"
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            {
-              value: 'hierarchy',
-              label: 'Product hierarchy',
-              count: ds.skus.length,
-            },
-            { value: 'vendors', label: 'Vendors', count: ds.vendors.length },
-            { value: 'uom', label: 'UOM conversions' },
-            {
-              value: 'calendars',
-              label: 'Operating calendars',
-              count: ds.calendars.length,
-            },
-            {
-              value: 'calex',
-              label: 'Calendar exceptions',
-              count: ds.calendarExceptions.length,
-            },
-            {
-              value: 'codes',
-              label: 'Code mappings',
-              count: ds.codeMappings.length,
-            },
-            {
-              value: 'params',
-              label: 'Parameters',
-              count: ds.parameters.length,
-            },
-            {
-              value: 'history',
-              label: 'Change history',
-              count: history.length,
-            },
-          ]}
-        />
+        <Tabs label="Master data sections" value={tab} onChange={(v) => navigate(masterPath(v))} tabs={MASTER_SECTIONS.map((m) => ({ value: m.slug, label: m.tab, count: counts[m.slug] }))} />
       </div>
-      {tab === 'hierarchy' && <HierarchyTab ds={ds} canEdit={canEdit} />}
+      {tab === 'product-hierarchy' && <HierarchyTab ds={ds} canEdit={canEdit} />}
       {tab === 'vendors' && <VendorsTab ds={ds} canEdit={canEdit} />}
-      {tab === 'uom' && <UomTab ds={ds} canEdit={canEdit} />}
-      {tab === 'calendars' && <CalendarsTab ds={ds} canEdit={canEdit} />}
-      {tab === 'calex' && <CalExTab ds={ds} canEdit={canEdit} />}
-      {tab === 'codes' && <CodesTab ds={ds} canEdit={canEdit} />}
-      {tab === 'params' && <ParamsTab ds={ds} canEdit={canEdit} />}
-      {tab === 'history' && <HistoryTab />}
+      {tab === 'uom-conversions' && <UomTab ds={ds} canEdit={canEdit} />}
+      {tab === 'operating-calendars' && <CalendarsTab ds={ds} canEdit={canEdit} />}
+      {tab === 'calendar-exceptions' && <CalExTab ds={ds} canEdit={canEdit} />}
+      {tab === 'code-mappings' && <CodesTab ds={ds} canEdit={canEdit} />}
+      {tab === 'parameters' && <ParamsTab ds={ds} canEdit={canEdit} />}
+      {tab === 'change-history' && <HistoryTab />}
     </div>
   )
 }
@@ -98,6 +74,7 @@ export default function MasterData() {
 function VendorsTab({ ds, canEdit }: { ds: Dataset; canEdit: boolean }) {
   const [edit, setEdit] = useState<Vendor | 'new' | null>(null)
   const [addRel, setAddRel] = useState(false)
+  const { ask, dialog } = useConfirm()
   return (
     <div className="space-y-3">
       <Card
@@ -200,14 +177,25 @@ function VendorsTab({ ds, canEdit }: { ds: Dataset; canEdit: boolean }) {
                           icon={Trash2}
                           label={`Remove relationship ${v?.name} → ${m.skuCode}`}
                           onClick={() =>
-                            saveMaster(
-                              (mt) => ({
-                                ...mt,
-                                vendorSkuMaps: mt.vendorSkuMaps.filter((x) => !(x.vendorId === m.vendorId && x.skuCode === m.skuCode)),
-                              }),
-                              'Removed vendor–SKU relationship',
-                              `${v?.name} → ${m.skuCode}`,
-                            )
+                            ask({
+                              title: 'Remove vendor–SKU relationship?',
+                              confirmLabel: 'Remove relationship',
+                              body: (
+                                <p>
+                                  <span className="font-medium">{v?.name}</span> will no longer be linked to <span className="font-medium">{s?.name ?? m.skuCode}</span> ({m.skuCode}). The pair drops out of analysis
+                                  {ds.codeMappings.some((c) => c.vendorId === m.vendorId && c.skuCode === m.skuCode) ? ' and its code mappings will show “No vendor relationship”' : ''}.
+                                </p>
+                              ),
+                              onConfirm: () =>
+                                saveMaster(
+                                  (mt) => ({
+                                    ...mt,
+                                    vendorSkuMaps: mt.vendorSkuMaps.filter((x) => !(x.vendorId === m.vendorId && x.skuCode === m.skuCode)),
+                                  }),
+                                  'Removed vendor–SKU relationship',
+                                  `${v?.name} → ${m.skuCode}`,
+                                ),
+                            })
                           }
                         />
                       </td>
@@ -221,6 +209,7 @@ function VendorsTab({ ds, canEdit }: { ds: Dataset; canEdit: boolean }) {
       </Card>
       {edit && <VendorModal ds={ds} vendor={edit === 'new' ? null : edit} onClose={() => setEdit(null)} />}
       {addRel && <RelationModal ds={ds} onClose={() => setAddRel(false)} />}
+      {dialog}
     </div>
   )
 }
@@ -370,6 +359,7 @@ function CalendarsTab({ ds, canEdit }: { ds: Dataset; canEdit: boolean }) {
 function CalExTab({ ds, canEdit }: { ds: Dataset; canEdit: boolean }) {
   const [add, setAdd] = useState(false)
   const rows = [...ds.calendarExceptions].sort((a, b) => a.date.localeCompare(b.date))
+  const { ask, dialog } = useConfirm()
   return (
     <Card
       bodyClass="p-0"
@@ -418,14 +408,24 @@ function CalExTab({ ds, canEdit }: { ds: Dataset; canEdit: boolean }) {
                         icon={Trash2}
                         label={`Remove ${x.reason}`}
                         onClick={() =>
-                          saveMaster(
-                            (m) => ({
-                              ...m,
-                              calendarExceptions: m.calendarExceptions.filter((c) => c.id !== x.id),
-                            }),
-                            'Removed calendar exception',
-                            `${x.id} · ${x.date} · ${x.reason}`,
-                          )
+                          ask({
+                            title: 'Remove calendar exception?',
+                            confirmLabel: 'Remove exception',
+                            body: (
+                              <p>
+                                <span className="font-medium">{x.reason}</span> ({x.type}, {fmtDate(x.date, true)}) will be removed and the weekly pattern applies again on that date. Statuses recalculate immediately.
+                              </p>
+                            ),
+                            onConfirm: () =>
+                              saveMaster(
+                                (m) => ({
+                                  ...m,
+                                  calendarExceptions: m.calendarExceptions.filter((c) => c.id !== x.id),
+                                }),
+                                'Removed calendar exception',
+                                `${x.id} · ${x.date} · ${x.reason}`,
+                              ),
+                          })
                         }
                       />
                     </td>
@@ -437,6 +437,7 @@ function CalExTab({ ds, canEdit }: { ds: Dataset; canEdit: boolean }) {
         </TableWrap>
       )}
       {add && <CalExceptionModal ds={ds} onClose={() => setAdd(false)} />}
+      {dialog}
     </Card>
   )
 }
@@ -445,6 +446,7 @@ function CodesTab({ ds, canEdit }: { ds: Dataset; canEdit: boolean }) {
   const [edit, setEdit] = useState<CodeMapping | 'new' | null>(null)
   const [vendor, setVendor] = useState('')
   const rows = ds.codeMappings.filter((c) => !vendor || c.vendorId === vendor)
+  const { ask, dialog } = useConfirm()
   return (
     <div className="space-y-3">
       <LocalFilters>
@@ -511,14 +513,25 @@ function CodesTab({ ds, canEdit }: { ds: Dataset; canEdit: boolean }) {
                             icon={Trash2}
                             label={`Remove mapping ${c.vendorCode}`}
                             onClick={() =>
-                              saveMaster(
-                                (m) => ({
-                                  ...m,
-                                  codeMappings: m.codeMappings.filter((x) => x.id !== c.id),
-                                }),
-                                'Removed code mapping',
-                                `${ds.idx.vendor.get(c.vendorId)?.name}: ${c.vendorCode} → ${c.skuCode}`,
-                              )
+                              ask({
+                                title: 'Remove code mapping?',
+                                confirmLabel: 'Remove mapping',
+                                body: (
+                                  <p>
+                                    Vendor code <span className="font-mono">{c.vendorCode}</span> from {ds.idx.vendor.get(c.vendorId)?.name} will no longer map to <span className="font-mono">{c.skuCode}</span>. Rows with this code will be
+                                    excluded at upload with an “unmapped code” warning.
+                                  </p>
+                                ),
+                                onConfirm: () =>
+                                  saveMaster(
+                                    (m) => ({
+                                      ...m,
+                                      codeMappings: m.codeMappings.filter((x) => x.id !== c.id),
+                                    }),
+                                    'Removed code mapping',
+                                    `${ds.idx.vendor.get(c.vendorId)?.name}: ${c.vendorCode} → ${c.skuCode}`,
+                                  ),
+                              })
                             }
                           />
                         </td>
@@ -532,6 +545,7 @@ function CodesTab({ ds, canEdit }: { ds: Dataset; canEdit: boolean }) {
         )}
       </Card>
       {edit && <CodeMappingModal ds={ds} mapping={edit === 'new' ? null : edit} onClose={() => setEdit(null)} />}
+      {dialog}
     </div>
   )
 }
@@ -602,7 +616,11 @@ function HistoryTab() {
       </LocalFilters>
       <Card bodyClass="p-0" title="Master data change history" subtitle="Local demo log of every maintenance change in this browser">
         {rows.length === 0 ? (
-          <EmptyState title="No changes recorded">Changes made in the other tabs appear here with who, when and what changed.</EmptyState>
+          q ? (
+            <EmptyState title="No changes match">Clear the search to see all recorded changes.</EmptyState>
+          ) : (
+            <EmptyState title="No changes recorded">Changes made in the other tabs appear here with who, when and what changed.</EmptyState>
+          )
         ) : (
           <>
             <TableWrap>

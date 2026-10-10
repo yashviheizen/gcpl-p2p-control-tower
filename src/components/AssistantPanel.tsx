@@ -439,7 +439,7 @@ const CAPABILITIES = 'vendors below plan, attainment, run-rate, reports needing 
 function pageLabel(path: string) {
   let best = { len: -1, label: 'This page' }
   for (const g of NAV)
-    for (const i of g.items) {
+    for (const i of g.items.flatMap((x) => [x, ...(x.children ?? [])])) {
       const hit = i.to === '/' ? path === '/' : path === i.to || path.startsWith(i.to + '/')
       if (hit && i.to.length > best.len) best = { len: i.to.length, label: i.label }
     }

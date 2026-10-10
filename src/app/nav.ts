@@ -7,6 +7,12 @@ export interface NavItem {
   icon: LucideIcon
   perm: Permission
   end?: boolean
+  /** Expandable sub-group (e.g. Master Data sections). The parent row toggles; only children navigate. */
+  children?: NavChild[]
+}
+export interface NavChild {
+  to: string
+  label: string
 }
 export interface NavGroup {
   id: string
@@ -15,6 +21,23 @@ export interface NavGroup {
   secondary?: boolean
   items: NavItem[]
 }
+
+/**
+ * Master Data sections, each with a stable URL (/master-data/<slug>). The sidebar, the in-page tabs and
+ * direct links all read this list (`label` for the sidebar, sentence-case `tab` for the in-page tabs); '/master-data' alone redirects to the first section.
+ */
+export const MASTER_SECTIONS = [
+  { slug: 'product-hierarchy', label: 'Product Hierarchy', tab: 'Product hierarchy' },
+  { slug: 'vendors', label: 'Vendors', tab: 'Vendors' },
+  { slug: 'uom-conversions', label: 'UOM Conversions', tab: 'UOM conversions' },
+  { slug: 'operating-calendars', label: 'Operating Calendars', tab: 'Operating calendars' },
+  { slug: 'calendar-exceptions', label: 'Calendar Exceptions', tab: 'Calendar exceptions' },
+  { slug: 'code-mappings', label: 'Code Mappings', tab: 'Code mappings' },
+  { slug: 'parameters', label: 'Parameters', tab: 'Parameters' },
+  { slug: 'change-history', label: 'Change History', tab: 'Change history' },
+] as const
+export type MasterSection = (typeof MASTER_SECTIONS)[number]['slug']
+export const masterPath = (slug: MasterSection) => `/master-data/${slug}`
 
 export const NAV: NavGroup[] = [
   {
@@ -141,6 +164,7 @@ export const NAV: NavGroup[] = [
         label: 'Master Data',
         icon: Package,
         perm: 'view.masterData',
+        children: MASTER_SECTIONS.map((m) => ({ to: masterPath(m.slug), label: m.label })),
       },
       {
         to: '/admin',

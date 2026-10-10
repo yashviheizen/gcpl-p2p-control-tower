@@ -51,6 +51,7 @@ export const router = createBrowserRouter(
             { path: '/data/uploads/:id', element: <BatchDetail /> },
             { path: '/data/upload/new', element: <ReportUpload /> },
             { path: '/master-data', element: <MasterData /> },
+            { path: '/master-data/:section', element: <MasterData /> },
             { path: '/admin', element: <Admin /> },
             { path: '*', element: <Navigate to="/" replace /> },
           ],

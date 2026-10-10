@@ -132,7 +132,7 @@ export default function DataQuality() {
         />
         <Kpi label="Rejected batches" value={rejectedBatches.length} sub="all time" to="/data/uploads?status=Rejected" />
         <Kpi label="Rows not ingested" value={fmtNum(rowsExcluded)} sub="excluded + rejected rows" help="Sum of rows excluded from partially ingested batches plus all rows of rejected batches." />
-        <Kpi label="Unmapped codes" value={unmapped} sub="issues with unknown item codes" to="/master-data" />
+        <Kpi label="Unmapped codes" value={unmapped} sub="issues with unknown item codes" to="/master-data/code-mappings" />
       </div>
 
       <Card className="mt-6" title="Report completeness – October" subtitle="One cell per vendor, report type and date · daily report types only" bodyClass="">

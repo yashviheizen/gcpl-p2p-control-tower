@@ -1,0 +1,182 @@
+@import "./base.css";
+
+/*
+ * GCPL brand theme — updated to match the P2P Control Tower prototype.
+ *
+ * This file keeps the developer theme contract (same variable names, same
+ * base.css import, same Avenir font faces). The values are taken from
+ * the prototype's src/index.css (@theme block) and checked against computed
+ * styles in Chrome on 10 Oct 2026. They were not copied by eye.
+ *
+ * What changed, and why, is listed in design-system.md § "Theme mapping".
+ *
+ * NOT VERIFIED AS DROP-IN: base.css and the developer's components were not
+ * available. Rendering against them has NOT been checked. Known dependencies:
+ *   - base.css decides how --ring / --ring-contrast are drawn (glow + contour?)
+ *     and how --radius is derived into sm/md/lg/xl.
+ *   - The prototype sets the html root to 14px, so its rem-based spacing is 3.5px
+ *     per step. If base.css keeps a 16px root, the same --spacing gives 4px per step.
+ *     Components then render about 14% larger than the prototype.
+ *     design-system.md gives target sizes in px for this reason.
+ *   - The sidebar has separate hover and active colours in the prototype.
+ *     The shadcn sidebar uses --sidebar-accent for both. See the "Extensions"
+ *     block at the end.
+ *
+ * GCPL brand face — Avenir Regular, Medium, and Heavy. Every weight the app can
+ * ask for resolves to a real cut, so nothing is ever browser-synthesized.
+ * (The prototype renders in Inter. Avenir is retained as the brand face.)
+ */
+@font-face {
+	font-family: "Avenir";
+	src: url("/fonts/avenir-regular.woff2") format("woff2");
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: "Avenir";
+	src: url("/fonts/avenir-medium.woff2") format("woff2");
+	font-weight: 500;
+	font-style: normal;
+	font-display: swap;
+}
+
+/** Avenir has no cut between Medium and Heavy, so Heavy covers the whole bold range. */
+@font-face {
+	font-family: "Avenir";
+	src: url("/fonts/avenir-heavy.woff2") format("woff2");
+	font-weight: 600 900;
+	font-style: normal;
+	font-display: swap;
+}
+
+:root {
+	/* Neutral, restrained palette. Teal appears only for primary actions,
+	   selected controls and active navigation. */
+	/* The app shell sits on canvas; cards, tables, and popovers are white on top of it. */
+	--canvas: #fafafa; /* prototype canvas */
+	--background: #ffffff; /* prototype surface */
+	--foreground: #18181b; /* prototype ink — 17.7:1 on white */
+	--card: #ffffff;
+	--card-foreground: #18181b;
+	--popover: #ffffff;
+	--popover-foreground: #18181b;
+	/* Primary action = teal (prototype "primary" button). Was #000000. */
+	--primary: #0f766e; /* white on it: 5.47:1 */
+	--primary-foreground: #ffffff;
+	/* Fill for the secondary button on hover, and other quiet controls. The prototype's secondary button is
+	   white with a --border outline and changes to this colour on hover (closest to shadcn "outline"). */
+	--secondary: #f4f4f5;
+	--secondary-foreground: #18181b;
+	/* Table headers, muted panels, disabled inputs. */
+	--muted: #f4f4f5;
+	/* Secondary text: labels, table headers, helper copy. 7.0:1 on --muted, 7.7:1 on white. */
+	--muted-foreground: #52525b;
+	/* Neutral hover for ghost buttons and menu rows. The prototype uses black/5 on white, which is about #f2f2f2. */
+	--accent: #f4f4f5;
+	--accent-foreground: #18181b;
+	/* Soft teal: selected rows and nav items, highlight panels. Accent ink #115e59 on it is 6.5:1. */
+	--accent-subtle: #e0f2ef;
+	/* Semantic colours — PRESERVED from the developer theme (unchanged values).
+	   The prototype uses slightly different, equally AA-tuned values; see design-system.md § Colour. */
+	/* Dark enough to clear 4.5:1 on --destructive-subtle, the ground it is read on. */
+	--destructive: #b91c1c;
+	--destructive-foreground: #ffffff;
+	--destructive-subtle: #fee2e2;
+	--success: #15803d;
+	--success-foreground: #ffffff;
+	--success-subtle: #dcfce7;
+	--warning: #b45309;
+	--warning-foreground: #ffffff;
+	--warning-subtle: #fef3c7;
+	--info: #1d4ed8;
+	--info-foreground: #ffffff;
+	--info-subtle: #dbeafe;
+	/* Card, table and divider hairlines (prototype line). */
+	--border: #e5e7eb;
+	/* Field outline (prototype line-strong). Stronger than the old hairline, but still 1.48:1,
+	   so SC 1.4.11 is not met by the border alone. See design-system.md § Inputs. */
+	--input: #d4d4d8;
+	/* Hover outline. The prototype has no hover change on fields, so this matches --input. */
+	--border-secondary: #d4d4d8;
+	/* Unchecked checkbox edge. The prototype uses native checkboxes, so there is no prototype value and
+	   the developer value is kept. */
+	--control-border: #bcbec3;
+	/* Focus: the prototype draws a 2px solid teal outline, offset 2px. There is no glow.
+	   Teal on white is 5.47:1, so the outline passes SC 1.4.11 on its own. */
+	--ring: #0f766e;
+	--ring-contrast: #0f766e;
+	/* Chart series in the prototype's order: actual, plan, dispatch, inventory.
+	   --chart-5 has no prototype equivalent, so the developer value is kept.
+	   --chart-2 (plan grey, 2.56:1) is used only as a dashed or secondary reference line beside a
+	   labelled legend. Do not use it for a series that must stand alone. */
+	--chart-1: #0f766e;
+	--chart-2: #a1a1aa;
+	--chart-3: #3b6fc4;
+	--chart-4: #8a5cc2;
+	--chart-5: #c98500;
+	/* Grey sidebar (was black). */
+	--sidebar: #f5f5f5;
+	--sidebar-foreground: #3f3f46; /* child links — 9.6:1 */
+	--sidebar-primary: #0f766e; /* 3px active indicator bar; brand mark tile */
+	--sidebar-primary-foreground: #ffffff;
+	/* Active item background. The prototype hover colour is a separate value: see --sidebar-hover below. */
+	--sidebar-accent: #e0f2ef;
+	--sidebar-accent-foreground: #115e59;
+	--sidebar-border: #e5e7eb; /* right edge and child-list guide line */
+	--sidebar-ring: #0f766e;
+	--font-sans: "Avenir", "Lato", "Helvetica Neue", Arial, sans-serif;
+	--font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+	--font-mono:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+		"Courier New", monospace;
+	/* Control radius (buttons, inputs, selects). Set in px because the prototype uses a fixed 6px.
+	   Cards use 8px and badges 4px; how base.css derives those from --radius is unverified. */
+	--radius: 6px;
+	--shadow-x: 0;
+	--shadow-y: 1px;
+	--shadow-blur: 2px;
+	--shadow-spread: 0px;
+	--shadow-opacity: 0.04;
+	--shadow-color: rgb(24 24 27);
+	/* Elevation, mapped to the prototype's three levels. Card is used on resting panels and secondary buttons.
+	   Pop is used on popovers, menus and the demo-controls panel. Modal (2xl) is used on dialogs and drawers. */
+	--shadow-2xs: 0 1px 2px rgba(24, 24, 27, 0.04);
+	--shadow-xs: 0 1px 2px rgba(24, 24, 27, 0.04);
+	--shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.04);
+	--shadow: 0 1px 2px rgba(24, 24, 27, 0.04);
+	--shadow-md:
+		0 8px 24px rgba(24, 24, 27, 0.12), 0 1px 3px rgba(24, 24, 27, 0.08);
+	--shadow-lg:
+		0 8px 24px rgba(24, 24, 27, 0.12), 0 1px 3px rgba(24, 24, 27, 0.08);
+	--shadow-xl:
+		0 8px 24px rgba(24, 24, 27, 0.12), 0 1px 3px rgba(24, 24, 27, 0.08);
+	--shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+	/* The brand's card elevation. A panel opts into this; it is not generic depth.
+	   The prototype is flatter than the old value: a single 1px hairline shadow. */
+	--shadow-card: 0 1px 2px rgba(24, 24, 27, 0.04);
+	--tracking-normal: 0em;
+	/* Unchanged. NOTE: the prototype's root is 14px, so one step is 3.5px there and 4px here at a 16px root. */
+	--spacing: 0.25rem;
+}
+
+/*
+ * Extensions — prototype values with NO existing variable in the theme contract.
+ * base.css and the current components do not read these. They are listed here so the values
+ * are not lost. Wire them up only where a component needs the distinction.
+ */
+:root {
+	--sidebar-hover: #ebebeb; /* sidebar hover; differs from the active --sidebar-accent */
+	--sidebar-group-foreground: #52525b; /* parent group labels: 12px semibold */
+	--sidebar-muted-foreground: #71717a; /* chevrons and the Collapse control. 4.43:1 is below AA for text — see design-system.md */
+	--subtle-foreground: #6b6b74; /* hints and timestamps: 4.8:1 on --muted, 5.3:1 on white */
+	--accent-hover: #115e59; /* primary button hover; white on it: 7.58:1 */
+	--shadow-pop: 0 8px 24px rgba(24, 24, 27, 0.12), 0 1px 3px rgba(24, 24, 27, 0.08);
+	/* Soft borders for callouts and the danger button, which pair with the -subtle fills.
+	   These are the prototype values. They sit next to the prototype semantic colours, not the preserved ones above. */
+	--destructive-border: #f2b1aa;
+	--success-border: #a6d8b8;
+	--warning-border: #f0c983;
+	--info-border: #b3c7ee;
+}

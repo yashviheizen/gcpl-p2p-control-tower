@@ -3,7 +3,7 @@ import { Search } from 'lucide-react'
 import { cloneElement, isValidElement, useId, useState, type ReactElement, type ReactNode } from 'react'
 import type { ActivityEntry } from '@/data/types'
 import type { MasterTables } from '@/data/dataset'
-import { cx, td } from '@/components/ui'
+import { Button, Modal, cx, td } from '@/components/ui'
 import { fmtDateTime } from '@/lib/dates'
 import { logActivity, store } from '@/lib/store'
 
@@ -39,6 +39,56 @@ export function Field({ label, error, hint, children, className }: { label: stri
       ) : null}
     </div>
   )
+}
+
+/** Confirmation step for removals and access changes. Local demo only – the note says so. */
+export function ConfirmDialog({ title, children, confirmLabel, onConfirm, onClose, danger = true }: { title: string; children: ReactNode; confirmLabel: string; onConfirm: () => void; onClose: () => void; danger?: boolean }) {
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={title}
+      width={440}
+      footer={
+        <>
+          <Button onClick={onClose} autoFocus>
+            Cancel
+          </Button>
+          <Button
+            variant={danger ? 'danger' : 'primary'}
+            onClick={() => {
+              onConfirm()
+              onClose()
+            }}
+          >
+            {confirmLabel}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-2 text-body text-ink">
+        {children}
+        <p className="text-label text-ink-subtle">Applies only in this browser for the demo. Use “Reset demo” in the top bar to restore fixtures.</p>
+      </div>
+    </Modal>
+  )
+}
+
+interface ConfirmRequest {
+  title: string
+  body: ReactNode
+  confirmLabel: string
+  onConfirm: () => void
+}
+/** `ask(...)` opens a ConfirmDialog; render `dialog` once in the component. */
+export function useConfirm() {
+  const [req, setReq] = useState<ConfirmRequest | null>(null)
+  const dialog = req && (
+    <ConfirmDialog title={req.title} confirmLabel={req.confirmLabel} onConfirm={req.onConfirm} onClose={() => setReq(null)}>
+      {req.body}
+    </ConfirmDialog>
+  )
+  return { ask: setReq, dialog }
 }
 
 export function Check({ label, checked, onChange, disabled, title }: { label: ReactNode; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; title?: string }) {
